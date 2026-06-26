@@ -5,17 +5,17 @@ TMPDIR="${TMPDIR:-/tmp}/jippity"
 mkdir -p "$TMPDIR"
 
 STAMP=$(date +%s)
-SCREENSHOT="$TMPDIR/window_$STAMP.png"
+SCREENSHOT="$TMPDIR/region_$STAMP.png"
 OUTFILE="$TMPDIR/response_$STAMP.txt"
 LOGFILE="$TMPDIR/last_run_$STAMP.log"
 
-spectacle -a -b -n -o "$SCREENSHOT"
+spectacle -r -b -n -o "$SCREENSHOT"
 if [ ! -f "$SCREENSHOT" ]; then
     kdialog --error "Screenshot was not created."
     exit 1
 fi
 
-PROMPT=$(kdialog --inputbox "Ask about this window:")
+PROMPT=$(kdialog --inputbox "Ask about this region:")
 if [ $? -ne 0 ] || [ -z "$PROMPT" ]; then
     exit 0
 fi

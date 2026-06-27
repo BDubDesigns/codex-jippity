@@ -3,18 +3,71 @@ set -euo pipefail
 
 usage() {
     echo "Usage: jippity --mode <region|screen|window|quick>"
+    echo "       jippity --toggle"
+    echo "       jippity --reset"
     exit 1
 }
 
 MODE=""
+DO_TOGGLE=false
+DO_RESET=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --mode) MODE="$2"; shift 2 ;;
+        --toggle) DO_TOGGLE=true; shift ;;
+        --reset) DO_RESET=true; shift ;;
         --help|-h) usage ;;
         *) usage ;;
     esac
 done
 
+# --- Paths ---
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/jippity"
+HISTORY_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/jippity"
+TMPDIR="${TMPDIR:-/tmp}/jippity"
+mkdir -p "$TMPDIR" "$CONFIG_DIR" "$HISTORY_DIR"/{screenshots,responses,logs}
+STATE_FILE="$CONFIG_DIR/state"
+HISTORY_FILE="$HISTORY_DIR/history.jsonl"
+
+# --- Load state ---
+THREAD_ID=""
+THREAD_MODE="one-shot"
+LAST_MODE=""
+[ -f "$STATE_FILE" ] && source "$STATE_FILE"
+
+# --- Handle --toggle ---
+if [ "$DO_TOGGLE" = true ]; then
+    if [ "$THREAD_MODE" = "continue" ]; then
+        THREAD_MODE="one-shot"
+        MSG="Jippity: one-shot mode"
+    else
+        THREAD_MODE="continue"
+        MSG="Jippity: continue-thread mode"
+    fi
+    cat > "$STATE_FILE" << EOF
+THREAD_ID="$THREAD_ID"
+THREAD_MODE="$THREAD_MODE"
+LAST_MODE="$LAST_MODE"
+EOF
+    kdialog --passivepopup "$MSG" 3 2>/dev/null || echo "$MSG"
+    exit 0
+fi
+
+# --- Handle --reset ---
+if [ "$DO_RESET" = true ]; then
+    THREAD_ID=""
+    THREAD_MODE="one-shot"
+    LAST_MODE=""
+    cat > "$STATE_FILE" << EOF
+THREAD_ID="$THREAD_ID"
+THREAD_MODE="$THREAD_MODE"
+LAST_MODE="$LAST_MODE"
+EOF
+    kdialog --passivepopup "Jippity: session reset (one-shot mode)" 3 2>/dev/null || echo "Session reset (one-shot mode)"
+    exit 0
+fi
+
+# --- Validate mode ---
 case "$MODE" in
     region)  SCREENSHOT_FLAG="-r"; PROMPT_TEXT="Ask about this region:"  ;;
     screen)  SCREENSHOT_FLAG="-f"; PROMPT_TEXT="Ask about this screen:"  ;;
@@ -22,21 +75,6 @@ case "$MODE" in
     quick)   SCREENSHOT_FLAG="";   PROMPT_TEXT="Ask a question:"         ;;
     *)       usage ;;
 esac
-
-# --- Paths ---
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/jippity"
-HISTORY_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/jippity"
-TMPDIR="${TMPDIR:-/tmp}/jippity"
-mkdir -p "$TMPDIR" "$CONFIG_DIR" "$HISTORY_DIR"/{screenshots,responses,logs}
-
-STATE_FILE="$CONFIG_DIR/state"
-HISTORY_FILE="$HISTORY_DIR/history.jsonl"
-
-# --- Load state ---
-SESSION_ID=""
-SESSION_MODE="one-shot"
-LAST_MODE=""
-[ -f "$STATE_FILE" ] && source "$STATE_FILE"
 
 # --- Screenshot ---
 STAMP=$(date +%s)
@@ -56,46 +94,45 @@ if [ $? -ne 0 ] || [ -z "$PROMPT" ]; then
     exit 0
 fi
 
-# --- Run Codex ---
+# --- Run Codex (always --ephemeral, always --skip-git-repo-check) ---
 OUTFILE="$HISTORY_DIR/responses/${MODE}_$STAMP.txt"
 LOGFILE="$HISTORY_DIR/logs/${MODE}_$STAMP.log"
 
-if [ "$SESSION_MODE" = "continue" ] && [ -n "$SESSION_ID" ]; then
-    if [ -n "$SCREENSHOT" ]; then
-        codex exec resume "$SESSION_ID" -i "$SCREENSHOT" -o "$OUTFILE" -- "$PROMPT" > "$LOGFILE" 2>&1
-    else
-        codex exec resume "$SESSION_ID" -o "$OUTFILE" -- "$PROMPT" > "$LOGFILE" 2>&1
+CODEX_BASE=(codex exec --ephemeral --skip-git-repo-check)
+
+if [ "$THREAD_MODE" = "continue" ] && [ -n "$THREAD_ID" ]; then
+    # Future: reconstruct conversation from history and prepend as context
+    # For now, fall through to fresh query (thread resume not yet implemented)
+    :
+fi
+
+if [ -n "$SCREENSHOT" ]; then
+    if ! "${CODEX_BASE[@]}" -i "$SCREENSHOT" -o "$OUTFILE" -- "$PROMPT" > "$LOGFILE" 2>&1; then
+        kdialog --error "Codex exited with an error. See $LOGFILE for details."
+        exit 1
     fi
-elif [ -n "$SCREENSHOT" ]; then
-    codex exec -i "$SCREENSHOT" -o "$OUTFILE" -- "$PROMPT" > "$LOGFILE" 2>&1
 else
-    codex exec -o "$OUTFILE" -- "$PROMPT" > "$LOGFILE" 2>&1
+    if ! "${CODEX_BASE[@]}" -o "$OUTFILE" -- "$PROMPT" > "$LOGFILE" 2>&1; then
+        kdialog --error "Codex exited with an error. See $LOGFILE for details."
+        exit 1
+    fi
 fi
 
-CODEX_EXIT=$?
-if [ $CODEX_EXIT -ne 0 ]; then
-    kdialog --error "Codex exited with an error. See $LOGFILE for details."
-    exit 1
-fi
+# --- Extract session ID and save state ---
+NEW_THREAD_ID=$(grep -oP 'session id: \K\S+' "$LOGFILE" || true)
+[ -n "$NEW_THREAD_ID" ] && THREAD_ID="$NEW_THREAD_ID"
 
-# --- Extract session ID ---
-NEW_SESSION_ID=$(grep -oP 'session id: \K\S+' "$LOGFILE" || true)
-if [ -n "$NEW_SESSION_ID" ]; then
-    SESSION_ID="$NEW_SESSION_ID"
-fi
-
-# --- Save state ---
 cat > "$STATE_FILE" << EOF
-SESSION_ID="$SESSION_ID"
-SESSION_MODE="$SESSION_MODE"
+THREAD_ID="$THREAD_ID"
+THREAD_MODE="$THREAD_MODE"
 LAST_MODE="$MODE"
 EOF
 
 # --- History ---
 TIMESTAMP=$(date -Iseconds)
 jq -n --arg ts "$TIMESTAMP" --arg mode "$MODE" --arg prompt "$PROMPT" \
-   --arg out "$OUTFILE" --arg img "${SCREENSHOT:-}" --arg sid "${SESSION_ID:-}" \
-   '{timestamp: $ts, mode: $mode, prompt: $prompt, responseFile: $out, imageFile: $img, sessionId: $sid}' \
+   --arg out "$OUTFILE" --arg img "${SCREENSHOT:-}" --arg sid "${THREAD_ID:-}" \
+   '{timestamp: $ts, mode: $mode, prompt: $prompt, responseFile: $out, imageFile: $img, threadId: $sid}' \
    >> "$HISTORY_FILE" 2>/dev/null || true
 
 # --- Notify ---

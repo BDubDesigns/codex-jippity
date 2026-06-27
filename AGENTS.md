@@ -15,8 +15,8 @@ A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex
 | `jippity-screen` | Wrapper → `jippity --mode screen` |
 | `jippity-region` | Wrapper → `jippity --mode region` |
 | `jippity-quick` | Wrapper → `jippity --mode quick` |
-| `jippity-toggle` | Switch one-shot / continue-thread mode |
-| `jippity-reset` | Clear thread back to one-shot |
+| `jippity-toggle` | Wrapper → `jippity --toggle` |
+| `jippity-reset` | Wrapper → `jippity --reset` |
 | `jippity-setup` | Create dirs, print KDE hotkey instructions |
 
 ## Key design facts

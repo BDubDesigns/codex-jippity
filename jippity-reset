@@ -1,15 +1,2 @@
 #!/usr/bin/env bash
-# Reset session: clear session ID, return to one-shot mode
-set -euo pipefail
-
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/jippity"
-mkdir -p "$CONFIG_DIR"
-STATE_FILE="$CONFIG_DIR/state"
-
-cat > "$STATE_FILE" << EOF
-SESSION_ID=""
-SESSION_MODE="one-shot"
-LAST_MODE=""
-EOF
-
-kdialog --passivepopup "Jippity session reset (one-shot mode)" 3 2>/dev/null || echo "Session reset (one-shot mode)"
+exec "$(dirname "$0")/jippity" --reset

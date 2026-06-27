@@ -1,28 +1,2 @@
 #!/usr/bin/env bash
-# Toggle between one-shot and continue-thread mode
-set -euo pipefail
-
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/jippity"
-mkdir -p "$CONFIG_DIR"
-STATE_FILE="$CONFIG_DIR/state"
-
-SESSION_ID=""
-SESSION_MODE="one-shot"
-LAST_MODE=""
-[ -f "$STATE_FILE" ] && source "$STATE_FILE"
-
-if [ "$SESSION_MODE" = "continue" ]; then
-    SESSION_MODE="one-shot"
-    MSG="Continue-thread: OFF (one-shot mode)"
-else
-    SESSION_MODE="continue"
-    MSG="Continue-thread: ON (resuming session ${SESSION_ID:-"next new session"})"
-fi
-
-cat > "$STATE_FILE" << EOF
-SESSION_ID="$SESSION_ID"
-SESSION_MODE="$SESSION_MODE"
-LAST_MODE="$LAST_MODE"
-EOF
-
-kdialog --passivepopup "$MSG" 3 2>/dev/null || echo "$MSG"
+exec "$(dirname "$0")/jippity" --toggle

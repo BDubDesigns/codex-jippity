@@ -11,8 +11,8 @@ mkdir -p "$CONFIG_DIR" "$HISTORY_DIR"/{screenshots,responses,logs}
 STATE_FILE="$CONFIG_DIR/state"
 if [ ! -f "$STATE_FILE" ]; then
     cat > "$STATE_FILE" << EOF
-SESSION_ID=""
-SESSION_MODE="one-shot"
+THREAD_ID=""
+THREAD_MODE="one-shot"
 LAST_MODE=""
 EOF
 fi
@@ -44,13 +44,13 @@ To bind KDE global shortcuts:
 
   Optional:
      Trigger: Super+R
-     Action: Command/URL: $SCRIPT_DIR/jippity-reset
+     Action: Command/URL: $SCRIPT_DIR/jippity --reset
 
      Trigger: Super+T
-     Action: Command/URL: $SCRIPT_DIR/jippity-toggle
+     Action: Command/URL: $SCRIPT_DIR/jippity --toggle
 
 Commands:
   $SCRIPT_DIR/jippity --mode <region|screen|window|quick>   Ask a question
-  $SCRIPT_DIR/jippity-toggle                                 Toggle continue-thread mode
-  $SCRIPT_DIR/jippity-reset                                  Reset session to one-shot
+  $SCRIPT_DIR/jippity --toggle                                Toggle continue-thread mode
+  $SCRIPT_DIR/jippity --reset                                 Reset session to one-shot
 EOF

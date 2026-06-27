@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Jippity setup — create config dirs and print KDE hotkey instructions
+set -euo pipefail
+
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/jippity"
+HISTORY_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/jippity"
+
+mkdir -p "$CONFIG_DIR" "$HISTORY_DIR"/{screenshots,responses,logs}
+
+# Default state file if missing
+STATE_FILE="$CONFIG_DIR/state"
+if [ ! -f "$STATE_FILE" ]; then
+    cat > "$STATE_FILE" << EOF
+SESSION_ID=""
+SESSION_MODE="one-shot"
+LAST_MODE=""
+EOF
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+cat << EOF
+Jippity directories created:
+  Config:  $CONFIG_DIR
+  History: $HISTORY_DIR
+  State:   $CONFIG_DIR/state
+
+To bind KDE global shortcuts:
+
+  1. Open System Settings > Shortcuts > Custom Shortcuts
+  2. Add four new shortcuts:
+
+     Trigger: Super+S
+     Action: Command/URL: $SCRIPT_DIR/jippity --mode region
+
+     Trigger: Super+W
+     Action: Command/URL: $SCRIPT_DIR/jippity --mode screen
+
+     Trigger: Super+A
+     Action: Command/URL: $SCRIPT_DIR/jippity --mode window
+
+     Trigger: Super+Q
+     Action: Command/URL: $SCRIPT_DIR/jippity --mode quick
+
+  Optional:
+     Trigger: Super+R
+     Action: Command/URL: $SCRIPT_DIR/jippity-reset
+
+     Trigger: Super+T
+     Action: Command/URL: $SCRIPT_DIR/jippity-toggle
+
+Commands:
+  $SCRIPT_DIR/jippity --mode <region|screen|window|quick>   Ask a question
+  $SCRIPT_DIR/jippity-toggle                                 Toggle continue-thread mode
+  $SCRIPT_DIR/jippity-reset                                  Reset session to one-shot
+EOF

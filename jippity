@@ -23,41 +23,86 @@ case "$MODE" in
     *)       usage ;;
 esac
 
+# --- Paths ---
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/jippity"
+HISTORY_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/jippity"
 TMPDIR="${TMPDIR:-/tmp}/jippity"
-mkdir -p "$TMPDIR"
+mkdir -p "$TMPDIR" "$CONFIG_DIR" "$HISTORY_DIR"/{screenshots,responses,logs}
 
+STATE_FILE="$CONFIG_DIR/state"
+HISTORY_FILE="$HISTORY_DIR/history.jsonl"
+
+# --- Load state ---
+SESSION_ID=""
+SESSION_MODE="one-shot"
+LAST_MODE=""
+[ -f "$STATE_FILE" ] && source "$STATE_FILE"
+
+# --- Screenshot ---
 STAMP=$(date +%s)
-OUTFILE="$TMPDIR/response_$STAMP.txt"
-LOGFILE="$TMPDIR/last_run_$STAMP.log"
-
+SCREENSHOT=""
 if [ -n "$SCREENSHOT_FLAG" ]; then
-    SCREENSHOT="$TMPDIR/${MODE}_$STAMP.png"
-    spectacle "$SCREENSHOT_FLAG" -b -n -o "$SCREENSHOT"
+    SCREENSHOT="$HISTORY_DIR/screenshots/${MODE}_$STAMP.png"
+    spectacle "$SCREENSHOT_FLAG" -b -n -o "$SCREENSHOT" 2>/dev/null
     if [ ! -f "$SCREENSHOT" ]; then
         kdialog --error "Screenshot was not created."
         exit 1
     fi
 fi
 
+# --- Prompt ---
 PROMPT=$(kdialog --inputbox "$PROMPT_TEXT")
 if [ $? -ne 0 ] || [ -z "$PROMPT" ]; then
     exit 0
 fi
 
-if [ -n "$SCREENSHOT_FLAG" ]; then
-    if ! codex exec -i "$SCREENSHOT" -o "$OUTFILE" -- "$PROMPT" > "$LOGFILE" 2>&1; then
-        kdialog --error "Codex exited with an error. See $LOGFILE for details."
-        exit 1
+# --- Run Codex ---
+OUTFILE="$HISTORY_DIR/responses/${MODE}_$STAMP.txt"
+LOGFILE="$HISTORY_DIR/logs/${MODE}_$STAMP.log"
+
+if [ "$SESSION_MODE" = "continue" ] && [ -n "$SESSION_ID" ]; then
+    if [ -n "$SCREENSHOT" ]; then
+        codex exec resume "$SESSION_ID" -i "$SCREENSHOT" -o "$OUTFILE" -- "$PROMPT" > "$LOGFILE" 2>&1
+    else
+        codex exec resume "$SESSION_ID" -o "$OUTFILE" -- "$PROMPT" > "$LOGFILE" 2>&1
     fi
+elif [ -n "$SCREENSHOT" ]; then
+    codex exec -i "$SCREENSHOT" -o "$OUTFILE" -- "$PROMPT" > "$LOGFILE" 2>&1
 else
-    if ! codex exec -o "$OUTFILE" -- "$PROMPT" > "$LOGFILE" 2>&1; then
-        kdialog --error "Codex exited with an error. See $LOGFILE for details."
-        exit 1
-    fi
+    codex exec -o "$OUTFILE" -- "$PROMPT" > "$LOGFILE" 2>&1
 fi
 
+CODEX_EXIT=$?
+if [ $CODEX_EXIT -ne 0 ]; then
+    kdialog --error "Codex exited with an error. See $LOGFILE for details."
+    exit 1
+fi
+
+# --- Extract session ID ---
+NEW_SESSION_ID=$(grep -oP 'session id: \K\S+' "$LOGFILE" || true)
+if [ -n "$NEW_SESSION_ID" ]; then
+    SESSION_ID="$NEW_SESSION_ID"
+fi
+
+# --- Save state ---
+cat > "$STATE_FILE" << EOF
+SESSION_ID="$SESSION_ID"
+SESSION_MODE="$SESSION_MODE"
+LAST_MODE="$MODE"
+EOF
+
+# --- History ---
+TIMESTAMP=$(date -Iseconds)
+jq -n --arg ts "$TIMESTAMP" --arg mode "$MODE" --arg prompt "$PROMPT" \
+   --arg out "$OUTFILE" --arg img "${SCREENSHOT:-}" --arg sid "${SESSION_ID:-}" \
+   '{timestamp: $ts, mode: $mode, prompt: $prompt, responseFile: $out, imageFile: $img, sessionId: $sid}' \
+   >> "$HISTORY_FILE" 2>/dev/null || true
+
+# --- Notify ---
+kdialog --passivepopup "Jippity response ready" 3 2>/dev/null || true
+
+# --- Display response ---
 WIDTH=800
-# Estimate visual line count: word-wrap at ~80 chars for better height calc
 LINES=$(fold -w 80 "$OUTFILE" | wc -l)
 [ "$LINES" -lt 1 ] && LINES=1
 HEIGHT=$(( LINES * 22 + 100 ))

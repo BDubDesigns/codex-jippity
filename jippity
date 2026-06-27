@@ -94,34 +94,52 @@ if [ $? -ne 0 ] || [ -z "$PROMPT" ]; then
     exit 0
 fi
 
-# --- Run Codex (always --ephemeral, always --skip-git-repo-check) ---
+# --- Reconstruct thread context (continue mode) ---
+CONTEXT=""
+if [ "$THREAD_MODE" = "continue" ] && [ -n "$THREAD_ID" ] && [ -f "$HISTORY_FILE" ]; then
+    ENTRIES=$(jq -c --arg tid "$THREAD_ID" 'select(.threadId == $tid)' < "$HISTORY_FILE" 2>/dev/null || true)
+    if [ -n "$ENTRIES" ]; then
+        BLOCK="[Previous conversation]"
+        while IFS= read -r entry; do
+            P=$(echo "$entry" | jq -r '.prompt // empty' 2>/dev/null || true)
+            R=$(echo "$entry" | jq -r '.response // empty' 2>/dev/null || true)
+            [ -n "$P" ] && BLOCK="$BLOCK"$'\n'"User: $P"
+            [ -n "$R" ] && BLOCK="$BLOCK"$'\n'"Jippity: $R"
+        done <<< "$ENTRIES"
+        CONTEXT="$BLOCK"$'\n\n'"---"$'\n\n'"User: $PROMPT"
+    fi
+fi
+[ -z "$CONTEXT" ] && CONTEXT="$PROMPT"
+
+# --- Generate thread ID for new threads ---
+if [ "$THREAD_MODE" = "continue" ] && [ -z "$THREAD_ID" ]; then
+    THREAD_ID=$(cat /proc/sys/kernel/random/uuid)
+elif [ "$THREAD_MODE" != "continue" ]; then
+    THREAD_ID=$(cat /proc/sys/kernel/random/uuid)
+fi
+
+# --- Run Codex ---
 OUTFILE="$HISTORY_DIR/responses/${MODE}_$STAMP.txt"
 LOGFILE="$HISTORY_DIR/logs/${MODE}_$STAMP.log"
 
 CODEX_BASE=(codex exec --ephemeral --skip-git-repo-check)
 
-if [ "$THREAD_MODE" = "continue" ] && [ -n "$THREAD_ID" ]; then
-    # Future: reconstruct conversation from history and prepend as context
-    # For now, fall through to fresh query (thread resume not yet implemented)
-    :
-fi
-
 if [ -n "$SCREENSHOT" ]; then
-    if ! "${CODEX_BASE[@]}" -i "$SCREENSHOT" -o "$OUTFILE" -- "$PROMPT" > "$LOGFILE" 2>&1; then
+    if ! "${CODEX_BASE[@]}" -i "$SCREENSHOT" -o "$OUTFILE" -- "$CONTEXT" > "$LOGFILE" 2>&1; then
         kdialog --error "Codex exited with an error. See $LOGFILE for details."
         exit 1
     fi
 else
-    if ! "${CODEX_BASE[@]}" -o "$OUTFILE" -- "$PROMPT" > "$LOGFILE" 2>&1; then
+    if ! "${CODEX_BASE[@]}" -o "$OUTFILE" -- "$CONTEXT" > "$LOGFILE" 2>&1; then
         kdialog --error "Codex exited with an error. See $LOGFILE for details."
         exit 1
     fi
 fi
 
-# --- Extract session ID and save state ---
-NEW_THREAD_ID=$(grep -oP 'session id: \K\S+' "$LOGFILE" || true)
-[ -n "$NEW_THREAD_ID" ] && THREAD_ID="$NEW_THREAD_ID"
+# --- Read response ---
+RESPONSE=$(cat "$OUTFILE" 2>/dev/null || echo "")
 
+# --- Save state ---
 cat > "$STATE_FILE" << EOF
 THREAD_ID="$THREAD_ID"
 THREAD_MODE="$THREAD_MODE"
@@ -131,8 +149,9 @@ EOF
 # --- History ---
 TIMESTAMP=$(date -Iseconds)
 jq -n --arg ts "$TIMESTAMP" --arg mode "$MODE" --arg prompt "$PROMPT" \
-   --arg out "$OUTFILE" --arg img "${SCREENSHOT:-}" --arg sid "${THREAD_ID:-}" \
-   '{timestamp: $ts, mode: $mode, prompt: $prompt, responseFile: $out, imageFile: $img, threadId: $sid}' \
+   --arg response "$RESPONSE" --arg ctx "$CONTEXT" --arg img "${SCREENSHOT:-}" \
+   --arg tid "$THREAD_ID" --arg out "$OUTFILE" \
+   '{timestamp: $ts, mode: $mode, prompt: $prompt, response: $response, context: $ctx, imageFile: $img, threadId: $tid, responseFile: $out}' \
    >> "$HISTORY_FILE" 2>/dev/null || true
 
 # --- Notify ---

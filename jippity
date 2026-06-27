@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    echo "Usage: jippity --mode <region|screen|window|quick>"
+    exit 1
+}
+
+MODE=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --mode) MODE="$2"; shift 2 ;;
+        --help|-h) usage ;;
+        *) usage ;;
+    esac
+done
+
+case "$MODE" in
+    region)  SCREENSHOT_FLAG="-r"; PROMPT_TEXT="Ask about this region:"  ;;
+    screen)  SCREENSHOT_FLAG="-f"; PROMPT_TEXT="Ask about this screen:"  ;;
+    window)  SCREENSHOT_FLAG="-a"; PROMPT_TEXT="Ask about this window:"  ;;
+    quick)   SCREENSHOT_FLAG="";   PROMPT_TEXT="Ask a question:"         ;;
+    *)       usage ;;
+esac
+
+TMPDIR="${TMPDIR:-/tmp}/jippity"
+mkdir -p "$TMPDIR"
+
+STAMP=$(date +%s)
+OUTFILE="$TMPDIR/response_$STAMP.txt"
+LOGFILE="$TMPDIR/last_run_$STAMP.log"
+
+if [ -n "$SCREENSHOT_FLAG" ]; then
+    SCREENSHOT="$TMPDIR/${MODE}_$STAMP.png"
+    spectacle "$SCREENSHOT_FLAG" -b -n -o "$SCREENSHOT"
+    if [ ! -f "$SCREENSHOT" ]; then
+        kdialog --error "Screenshot was not created."
+        exit 1
+    fi
+fi
+
+PROMPT=$(kdialog --inputbox "$PROMPT_TEXT")
+if [ $? -ne 0 ] || [ -z "$PROMPT" ]; then
+    exit 0
+fi
+
+if [ -n "$SCREENSHOT_FLAG" ]; then
+    if ! codex exec -i "$SCREENSHOT" -o "$OUTFILE" -- "$PROMPT" > "$LOGFILE" 2>&1; then
+        kdialog --error "Codex exited with an error. See $LOGFILE for details."
+        exit 1
+    fi
+else
+    if ! codex exec -o "$OUTFILE" -- "$PROMPT" > "$LOGFILE" 2>&1; then
+        kdialog --error "Codex exited with an error. See $LOGFILE for details."
+        exit 1
+    fi
+fi
+
+WIDTH=800
+LINES=$(wc -l < "$OUTFILE")
+HEIGHT=$(( LINES * 22 + 100 ))
+[ "$HEIGHT" -lt 200 ] && HEIGHT=200
+[ "$HEIGHT" -gt 800 ] && HEIGHT=800
+kdialog --title "Jippity Response" --geometry "${WIDTH}x${HEIGHT}" --textbox "$OUTFILE"

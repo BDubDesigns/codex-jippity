@@ -2,52 +2,67 @@
 
 ## What this is
 
-A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex). Press a hotkey → (optional screenshot) → type prompt → Codex answers. MVP is shell scripts, no build system or language runtime yet.
+A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex). Press a hotkey → (optional screenshot) → type prompt → Codex answers. Shell scripts, no build system or language runtime.
 
 ## Current state
 
-**Pre-implementation.** Only source file is `spec.md` — the design document. No code, no build tooling, no CI, no tests. Git repo is empty (zero commits). Implementation has not started.
+**Phases 0–4 implemented.** Code exists, tested on this machine.
+
+| Script | Purpose |
+|--------|---------|
+| `jippity` | Shared core: `jippity --mode <region\|screen\|window\|quick>` |
+| `jippity-window` | Wrapper → `jippity --mode window` |
+| `jippity-screen` | Wrapper → `jippity --mode screen` |
+| `jippity-region` | Wrapper → `jippity --mode region` |
+| `jippity-quick` | Wrapper → `jippity --mode quick` |
+| `jippity-toggle` | Switch one-shot / continue-thread mode |
+| `jippity-reset` | Clear thread back to one-shot |
+| `jippity-setup` | Create dirs, print KDE hotkey instructions |
 
 ## Key design facts
 
-- **Core principle:** thin UX layer over `codex` CLI. Jippity owns hotkeys, screenshots, prompt input, output display. Codex owns model, reasoning, sessions, auth.
-- **MVP:** four standalone scripts — `jippity-region`, `jippity-screen`, `jippity-window`, `jippity-quick`.
-- **Phase 2:** refactor into `jippity --mode <region|screen|window|quick>`.
+- **Core principle:** thin UX layer over `codex` CLI. Jippity owns hotkeys, screenshots, prompt input, output display. Codex owns model, reasoning, auth.
 - **Target platform:** Linux + KDE Plasma + Wayland + CachyOS/Arch + fish shell.
-- **External deps (MVP):** `codex`, `spectacle`, `kdialog`, standard Unix tools, KDE global shortcuts.
-- **Config:** `~/.config/jippity/config.json`
-- **State (phase 3+):** `~/.config/jippity/state.json`
-- **History (phase 4+):** `~/.local/share/jippity/`
+- **External deps:** `codex`, `spectacle`, `kdialog`, `jq`, standard Unix tools, KDE global shortcuts.
+- **Config / state:** `~/.config/jippity/state`
+- **History:** `~/.local/share/jippity/` with `screenshots/`, `responses/`, `logs/`, `history.jsonl`
+
+## Key design decisions
+
+- **Shared core** — `jippity --mode <mode>`. Four wrappers are one-liner `exec` calls.
+- **Clean output** — `codex exec -o <file>` writes only the last message, no metadata header.
+- **`--ephemeral`** — all `codex exec` calls use `--ephemeral` to avoid polluting codex's session store with one-off questions.
+- **Local thread resume** — instead of `codex exec resume`, reconstruct conversation history from local `history.jsonl` and prepend to the new prompt. More reliable, no dependency on codex session store, works even if codex clears sessions.
+- **Dynamic dialog sizing** — `fold -w 80` for visual line estimate, `height = lines × 22px + 100px`, clamped 120–800px.
+- **Spectacle noise suppressed** — stderr to `/dev/null`.
+- **Notification** — `kdialog --passivepopup` after each response.
+- **No streaming** — blocks for full response.
 
 ## Development roadmap
 
-| Phase | What |
-|-------|------|
-| 0 | Manual validation: `codex -i`, `spectacle` CLI, `kdialog` input/output |
-| 1 | Four standalone scripts (one-shot, no shared core) |
-| 2 | Shared core: `jippity --mode <mode>` |
-| 3 | Session resume via `codex --resume <session_id>`, state file, continue-thread toggle |
-| 4 | History storage (prompt, response, screenshot path, timestamp) |
-| 5 | Tray app |
-| 6 | Voice input |
-| 7 | Rich GUI (Tauri/Qt/GTK/Electron) |
+| Phase | What | Status |
+|-------|------|--------|
+| 0 | Manual validation: `codex -i`, `spectacle` CLI, `kdialog` | Done |
+| 1 | Four standalone scripts | Done |
+| 2 | Shared core: `jippity --mode <mode>` | Done |
+| 3 | Session resume via local history reconstruction | Planned (see HANDOFF.md) |
+| 4 | History storage (prompt, response, screenshot, timestamp) | Done |
+| 5 | Tray app | Next |
+| 6 | Voice input | Future |
+| 7 | Rich GUI (Tauri/Qt/GTK/Electron) | Future |
 
-## MVP hotkeys
+## Hotkeys (not yet bound)
 
 | Key | Command | Action |
 |-----|---------|--------|
-| Super+S | `jippity-region` | Select region → screenshot → prompt → Codex |
-| Super+W | `jippity-screen` | Full screen → prompt → Codex |
-| Super+A | `jippity-window` | Active window → prompt → Codex |
-| Super+Q | `jippity-quick` | Prompt only → Codex |
-
-## MVP output display
-
-Write Codex output to temp file, open with `kdialog --textbox`.
+| Super+S | `jippity --mode region` | Select region → screenshot → prompt → Codex |
+| Super+W | `jippity --mode screen` | Full screen → prompt → Codex |
+| Super+A | `jippity --mode window` | Active window → prompt → Codex |
+| Super+Q | `jippity --mode quick` | Prompt only → Codex |
 
 ## Error handling
 
-Show user-readable popups (not silent failures) for: missing deps (`codex`, `spectacle`, `kdialog`), cancelled capture, empty prompt, Codex non-zero exit, timeout, missing session ID.
+Show user-readable popups for: missing deps, cancelled capture, empty prompt, Codex non-zero exit, timeout.
 
 ## Implementation philosophy
 

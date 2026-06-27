@@ -57,8 +57,10 @@ else
 fi
 
 WIDTH=800
-LINES=$(wc -l < "$OUTFILE")
+# Estimate visual line count: word-wrap at ~80 chars for better height calc
+LINES=$(fold -w 80 "$OUTFILE" | wc -l)
+[ "$LINES" -lt 1 ] && LINES=1
 HEIGHT=$(( LINES * 22 + 100 ))
-[ "$HEIGHT" -lt 200 ] && HEIGHT=200
+[ "$HEIGHT" -lt 120 ] && HEIGHT=120
 [ "$HEIGHT" -gt 800 ] && HEIGHT=800
 kdialog --title "Jippity Response" --geometry "${WIDTH}x${HEIGHT}" --textbox "$OUTFILE"

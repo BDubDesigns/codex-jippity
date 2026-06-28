@@ -6,7 +6,7 @@ A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex
 
 ## Current state
 
-**Phases 0–4 + history viewer implemented.** Code exists, tested on this machine.
+**Phases 0–4.6 implemented.** Code exists, tested on this machine.
 
 | Script | Purpose |
 |--------|---------|
@@ -51,7 +51,7 @@ A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex
 | 3 | Session resume via local history reconstruction | Done |
 | 4 | History storage (prompt, response, screenshot, timestamp) | Done |
 | 4.5 | History viewer (`jippity --history`) | Done |
-| 4.6 | Active-thread visibility in history viewer | Next |
+| 4.6 | Active-thread visibility in history viewer | Done |
 | 5 | *(folded into Phase 7)* | — |
 | 6 | Voice input | Future |
 | 7 | Rich GUI + tray (Tauri/Qt/GTK/Electron) | Future |

@@ -80,10 +80,6 @@ Benefits:
 ## Directly Next
 
 - **Bind KDE global shortcuts.** Super+S → `jippity --mode region`, etc. See `jippity-setup` output. Super+H → `jippity --history`.
-- **Phase 4.6: Active-thread visibility in history viewer.** Today the active thread is only identifiable by single-clicking rows until you see the "(currently active)" suffix. Three additions to `jippity-history`:
-  1. **List-row marker** — prefix the active thread's row with `▸` (or a ★ glyph) in the thread list, so it's visible without selecting anything.
-  2. **Persistent status bar** — a line above the search box (or below the list) showing `Active: <first-prompt preview> · <last-timestamp>`, always visible.
-  3. **Bold active row** — apply `QFont.Weight.Bold` to the active thread's row label so it stands out at a glance.
 - **No standalone tray phase.** Tray app folded into Phase 7 (rich GUI).
 
 ## Longer-Term Vision (Phase 6–7)

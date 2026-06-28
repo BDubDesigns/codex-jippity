@@ -188,6 +188,7 @@ def main():
             QLabel, QSplitter, QMessageBox, QAbstractItemView,
         )
         from PyQt6.QtCore import Qt
+        from PyQt6.QtGui import QFont
     except ImportError:
         sys.stderr.write("PyQt6 not available\n")
         sys.exit(3)
@@ -208,6 +209,10 @@ def main():
     win.setCentralWidget(central)
 
     outer = QVBoxLayout(central)
+
+    active_status = QLabel()
+    active_status.setStyleSheet("color: #1d9933; font-weight: 600; padding: 2px 4px;")
+    outer.addWidget(active_status)
 
     search = QLineEdit()
     search.setPlaceholderText("Search prompts and responses…")
@@ -254,18 +259,42 @@ def main():
     btn_row.addWidget(btn_close)
     outer.addLayout(btn_row)
 
+    def is_active_thread(t):
+        return state.get("THREAD_ID", "") == t["thread_id"]
+
     def populate(query=""):
+        active_id = state.get("THREAD_ID", "")
         list_widget.clear()
         shown = 0
         for t in threads:
             if not thread_matches(query, t):
                 continue
-            label = f"{preview(t['first_prompt'])}  ·  {t['count']} exch  ·  {fmt_ts(t['last_ts'])}"
+            marker = "▸ " if t["thread_id"] == active_id else ""
+            label = f"{marker}{preview(t['first_prompt'])}  ·  {t['count']} exch  ·  {fmt_ts(t['last_ts'])}"
             item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, t)
+            if t["thread_id"] == active_id:
+                font = item.font()
+                font.setWeight(QFont.Weight.Bold)
+                item.setFont(font)
             list_widget.addItem(item)
             shown += 1
         status.setText(f"{shown} of {len(threads)} thread(s)")
+        refresh_active_status()
+
+    def refresh_active_status():
+        active_id = state.get("THREAD_ID", "")
+        if not active_id:
+            active_status.setText("No active thread · next prompt starts a new one")
+            return
+        match = next((t for t in threads if t["thread_id"] == active_id), None)
+        if match is None:
+            active_status.setText(f"Active: {active_id[:8]}… (no longer in history)")
+            return
+        active_status.setText(
+            f"Active: {preview(match['first_prompt'], 80)}"
+            f"  ·  {match['count']} exch  ·  last {fmt_ts(match['last_ts'])}"
+        )
 
     populate()
 
@@ -303,8 +332,7 @@ def main():
         transcript.setHtml("<br>".join(parts))
 
     def update_active_label(t):
-        is_active = (state.get("THREAD_ID", "") == t["thread_id"])
-        suffix = "  (currently active)" if is_active else ""
+        suffix = "  (currently active)" if is_active_thread(t) else ""
         active_label.setText(f"Selected: {preview(t['first_prompt'], 80)}{suffix}")
 
     def on_set_active():
@@ -315,6 +343,7 @@ def main():
         write_state(t["thread_id"], state.get("LAST_MODE", ""), True)
         state["THREAD_ID"] = t["thread_id"]
         state["CONTINUE_DEFAULT"] = "true"
+        populate(search.text())
         update_active_label(t)
         QMessageBox.information(win, "Thread Activated",
             f"Active thread set to:\n{preview(t['first_prompt'], 100)}\n\n"
@@ -335,6 +364,11 @@ def main():
         kept, removed, files = rewrite_history_without(history_path, ids)
         nonlocal threads
         threads = [t for t in threads if t["thread_id"] not in ids]
+        # If the active thread was deleted, clear it from state
+        if state.get("THREAD_ID", "") in ids:
+            state["THREAD_ID"] = ""
+            state["CONTINUE_DEFAULT"] = "false"
+            write_state("", state.get("LAST_MODE", ""), False)
         populate(search.text())
         transcript.clear()
         active_label.setText("")

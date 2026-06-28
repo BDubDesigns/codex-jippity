@@ -1,0 +1,334 @@
+#!/usr/bin/env python3
+"""Jippity history viewer: browse past threads, search, set active, delete.
+
+Usage: jippity-history
+Reads ~/.local/share/jippity/history.jsonl and ~/_config/jippity/state.
+State file may be updated (THREAD_ID, CONTINUE_DEFAULT) when user clicks
+"Set Active". History file is rewritten when user deletes threads.
+"""
+import json
+import os
+import sys
+from collections import OrderedDict
+from datetime import datetime
+
+
+def data_dir():
+    return os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")) + "/jippity"
+
+
+def config_dir():
+    return os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")) + "/jippity"
+
+
+def history_file():
+    return data_dir() + "/history.jsonl"
+
+
+def state_file():
+    return config_dir() + "/state"
+
+
+def load_threads(history_path):
+    """Group history.jsonl entries by threadId into an OrderedDict.
+
+    Returns list of dicts: {thread_id, entries: [entry, ...],
+    first_prompt, first_ts, last_ts, count}. Sorted later by caller.
+    """
+    threads = OrderedDict()
+    if not os.path.exists(history_path):
+        return []
+    with open(history_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            tid = entry.get("threadId", "")
+            if not tid:
+                continue
+            if tid not in threads:
+                threads[tid] = {"thread_id": tid, "entries": []}
+            threads[tid]["entries"].append(entry)
+    result = []
+    for tid, t in threads.items():
+        entries = t["entries"]
+        first = entries[0]
+        last = entries[-1]
+        result.append({
+            "thread_id": tid,
+            "entries": entries,
+            "first_prompt": first.get("prompt", ""),
+            "first_ts": first.get("timestamp", ""),
+            "last_ts": last.get("timestamp", ""),
+            "count": len(entries),
+            "modes": sorted(set(e.get("mode", "") for e in entries)),
+        })
+    return result
+
+
+def fmt_ts(ts):
+    """Render ISO timestamp as a short YYYY-MM-DD HH:MM string."""
+    try:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        return dt.strftime("%Y-%m-%d %H:%M")
+    except (ValueError, AttributeError):
+        return ts[:16] if ts else ""
+
+
+def preview(text, n=60):
+    s = (text or "").replace("\n", " ").strip()
+    return s[:n] + ("…" if len(s) > n else "")
+
+
+def thread_matches(needle, thread):
+    """Case-insensitive substring match across all prompts+responses."""
+    if not needle:
+        return True
+    n = needle.lower()
+    for e in thread["entries"]:
+        if n in (e.get("prompt", "") or "").lower():
+            return True
+        if n in (e.get("response", "") or "").lower():
+            return True
+    return False
+
+
+def read_state():
+    """Read state file as dict. Returns {THREAD_ID, LAST_MODE, CONTINUE_DEFAULT}."""
+    s = {"THREAD_ID": "", "LAST_MODE": "", "CONTINUE_DEFAULT": "false"}
+    path = state_file()
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                if "=" in line and not line.strip().startswith("#"):
+                    k, _, v = line.partition("=")
+                    s[k.strip()] = v.strip().strip('"')
+    return s
+
+
+def write_state(thread_id, last_mode, cont_default):
+    os.makedirs(config_dir(), exist_ok=True)
+    cont = "true" if cont_default else "false"
+    with open(state_file(), "w", encoding="utf-8") as f:
+        f.write(f'THREAD_ID="{thread_id}"\n')
+        f.write(f'LAST_MODE="{last_mode}"\n')
+        f.write(f'CONTINUE_DEFAULT={cont}\n')
+
+
+def rewrite_history_without(history_path, exclude_ids):
+    """Remove all entries whose threadId is in exclude_ids. Also delete
+    any referenced screenshot files. Returns (kept_count, removed_count,
+    deleted_files)."""
+    kept = []
+    removed = 0
+    deleted_files = []
+    if not os.path.exists(history_path):
+        return 0, 0, []
+    with open(history_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                kept.append(line)
+                continue
+            tid = entry.get("threadId", "")
+            if tid in exclude_ids:
+                removed += 1
+                img = entry.get("imageFile", "")
+                if img and os.path.exists(img):
+                    try:
+                        os.remove(img)
+                        deleted_files.append(img)
+                    except OSError:
+                        pass
+            else:
+                kept.append(line)
+    tmp = history_path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        for line in kept:
+            f.write(line + "\n")
+    os.replace(tmp, history_path)
+    return len(kept), removed, deleted_files
+
+
+def main():
+    try:
+        from PyQt6.QtWidgets import (
+            QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
+            QLineEdit, QListWidget, QListWidgetItem, QTextEdit, QPushButton,
+            QLabel, QSplitter, QMessageBox, QAbstractItemView,
+        )
+        from PyQt6.QtCore import Qt
+    except ImportError:
+        sys.stderr.write("PyQt6 not available\n")
+        sys.exit(3)
+
+    app = QApplication(sys.argv)
+    app.setApplicationName("Jippity History")
+
+    history_path = history_file()
+    state = read_state()
+    threads = sorted(load_threads(history_path),
+                     key=lambda t: t["last_ts"], reverse=True)
+
+    win = QMainWindow()
+    win.setWindowTitle("Jippity History")
+    win.resize(960, 600)
+
+    central = QWidget()
+    win.setCentralWidget(central)
+
+    outer = QVBoxLayout(central)
+
+    search = QLineEdit()
+    search.setPlaceholderText("Search prompts and responses…")
+    outer.addWidget(search)
+
+    splitter = QSplitter(Qt.Orientation.Horizontal)
+    outer.addWidget(splitter, 1)
+
+    left = QWidget()
+    left_layout = QVBoxLayout(left)
+    left_layout.setContentsMargins(0, 0, 0, 0)
+
+    list_widget = QListWidget()
+    list_widget.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+    left_layout.addWidget(list_widget, 1)
+
+    status = QLabel(f"{len(threads)} thread(s)")
+    left_layout.addWidget(status)
+    splitter.addWidget(left)
+
+    right = QWidget()
+    right_layout = QVBoxLayout(right)
+    right_layout.setContentsMargins(0, 0, 0, 0)
+
+    transcript = QTextEdit()
+    transcript.setReadOnly(True)
+    right_layout.addWidget(transcript, 1)
+
+    active_label = QLabel()
+    active_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    right_layout.addWidget(active_label)
+    splitter.addWidget(right)
+    splitter.setSizes([360, 600])
+
+    btn_row = QHBoxLayout()
+    btn_set_active = QPushButton("Set as Active Thread")
+    btn_set_active.setEnabled(False)
+    btn_delete = QPushButton("Delete Selected")
+    btn_delete.setEnabled(False)
+    btn_close = QPushButton("Close")
+    btn_row.addWidget(btn_set_active)
+    btn_row.addWidget(btn_delete)
+    btn_row.addStretch(1)
+    btn_row.addWidget(btn_close)
+    outer.addLayout(btn_row)
+
+    def populate(query=""):
+        list_widget.clear()
+        shown = 0
+        for t in threads:
+            if not thread_matches(query, t):
+                continue
+            label = f"{preview(t['first_prompt'])}  ·  {t['count']} exch  ·  {fmt_ts(t['last_ts'])}"
+            item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, t)
+            list_widget.addItem(item)
+            shown += 1
+        status.setText(f"{shown} of {len(threads)} thread(s)")
+
+    populate()
+
+    def on_selection_changed():
+        sel = list_widget.selectedItems()
+        btn_delete.setEnabled(len(sel) > 0)
+        btn_set_active.setEnabled(len(sel) == 1)
+        if len(sel) == 1:
+            t = sel[0].data(Qt.ItemDataRole.UserRole)
+            render_transcript(t)
+            update_active_label(t)
+        else:
+            transcript.clear()
+            active_label.setText("")
+
+    def render_transcript(t):
+        parts = []
+        parts.append(f"<b>Thread {t['thread_id'][:8]}</b> "
+                     f"— {t['count']} exchange(s), modes: {', '.join(t['modes'])}")
+        parts.append(f"<i>First: {fmt_ts(t['first_ts'])}  ·  Last: {fmt_ts(t['last_ts'])}</i>")
+        parts.append("<hr>")
+        for i, e in enumerate(t["entries"], 1):
+            ts = fmt_ts(e.get("timestamp", ""))
+            mode = e.get("mode", "")
+            img = e.get("imageFile", "")
+            header = f"<b>#{i} [{mode}]</b> <i>{ts}</i>"
+            if img:
+                header += f"  ·  <i>screenshot</i>"
+            prompt = (e.get("prompt", "") or "").replace("<", "&lt;").replace(">", "&gt;")
+            response = (e.get("response", "") or "").replace("<", "&lt;").replace(">", "&gt;")
+            parts.append(header)
+            parts.append(f"<b>User:</b> {prompt}")
+            parts.append(f"<b>Jippity:</b> {response}")
+            parts.append("<br>")
+        transcript.setHtml("<br>".join(parts))
+
+    def update_active_label(t):
+        is_active = (state.get("THREAD_ID", "") == t["thread_id"])
+        suffix = "  (currently active)" if is_active else ""
+        active_label.setText(f"Selected: {preview(t['first_prompt'], 80)}{suffix}")
+
+    def on_set_active():
+        sel = list_widget.selectedItems()
+        if len(sel) != 1:
+            return
+        t = sel[0].data(Qt.ItemDataRole.UserRole)
+        write_state(t["thread_id"], state.get("LAST_MODE", ""), True)
+        state["THREAD_ID"] = t["thread_id"]
+        state["CONTINUE_DEFAULT"] = "true"
+        update_active_label(t)
+        QMessageBox.information(win, "Thread Activated",
+            f"Active thread set to:\n{preview(t['first_prompt'], 100)}\n\n"
+            f"Next prompt will continue this thread (checkbox pre-checked).")
+
+    def on_delete():
+        sel = list_widget.selectedItems()
+        if not sel:
+            return
+        ids = {item.data(Qt.ItemDataRole.UserRole)["thread_id"] for item in sel}
+        n = len(ids)
+        if QMessageBox.question(win, "Delete Threads",
+                f"Delete {n} thread(s) and all their exchanges?\n"
+                f"This removes their history entries and any screenshot files.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        kept, removed, files = rewrite_history_without(history_path, ids)
+        nonlocal threads
+        threads = [t for t in threads if t["thread_id"] not in ids]
+        populate(search.text())
+        transcript.clear()
+        active_label.setText("")
+        status.setText(f"{len(threads)} thread(s) · removed {removed} entries, "
+                       f"{len(files)} screenshot(s)")
+
+    search.textChanged.connect(populate)
+    list_widget.itemSelectionChanged.connect(on_selection_changed)
+    list_widget.itemClicked.connect(on_selection_changed)
+    btn_set_active.clicked.connect(on_set_active)
+    btn_delete.clicked.connect(on_delete)
+    btn_close.clicked.connect(win.close)
+
+    win.show()
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

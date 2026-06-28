@@ -13,6 +13,8 @@ Shared core via `jippity --mode <region|screen|window|quick>` with four thin wra
 
 Additional commands:
 - `jippity-setup` — creates directories, prints KDE hotkey binding instructions
+- `jippity-prompt` — PyQt6 helper for the prompt dialog (input + continue-thread checkbox)
+- `jippity-history` — PyQt6 helper for the history viewer (`jippity --history`)
 
 Toolbar removed:
 - `jippity-toggle` / `jippity-reset` — deleted. The continue-thread checkbox replaced toggle; reset is no longer a separate script.
@@ -35,6 +37,7 @@ Toolbar removed:
 - `codex exec resume --last -i <image> -o <file> -- <prompt>` — session continuation (alternative approach, not used)
 - `kdialog --inputbox`, `--textbox`, `--passivepopup` — all dialog types work
 - `jippity-prompt` (PyQt6 helper) — combined input + continue-thread checkbox in one native Qt dialog
+- `jippity-history` (PyQt6 helper) — thread list with full transcript, search, multi-select delete (also removes screenshots), and "Set as Active Thread" (writes THREAD_ID + CONTINUE_DEFAULT=true)
 - Thread reconstruction from `history.jsonl` — match entries by THREAD_ID, format as conversation block, prepend to prompt
 
 ### What didn't work
@@ -74,7 +77,7 @@ Benefits:
 
 ## Directly Next
 
-- **Bind KDE global shortcuts.** Super+S → `jippity --mode region`, etc. See `jippity-setup` output.
+- **Bind KDE global shortcuts.** Super+S → `jippity --mode region`, etc. See `jippity-setup` output. Super+H → `jippity --history`.
 - **Tray app (Phase 5).** System tray with quick action buttons, recent history access.
 
 ## Longer-Term Vision (Phase 6–7)

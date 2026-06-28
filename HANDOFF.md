@@ -37,14 +37,16 @@ Toolbar removed:
 - `codex exec resume --last -i <image> -o <file> -- <prompt>` — session continuation (alternative approach, not used)
 - `kdialog --inputbox`, `--textbox`, `--passivepopup` — all dialog types work
 - `jippity-prompt` (PyQt6 helper) — combined input + continue-thread checkbox in one native Qt dialog
-- `jippity-history` (PyQt6 helper) — thread list with full transcript, search, multi-select delete (also removes screenshots), and "Set as Active Thread" (writes THREAD_ID + CONTINUE_DEFAULT=true)
+- `jippity-history` (PyQt6 helper) — thread list with full transcript, search, multi-select delete (also removes screenshots), and "Set as Active Thread" (writes THREAD_ID + CONTINUE_DEFAULT=true). Tolerates legacy pretty-printed JSONL; migrates to compact JSONL on first delete.
 - Thread reconstruction from `history.jsonl` — match entries by THREAD_ID, format as conversation block, prepend to prompt
 
 ### What didn't work
 
-- **Always-on-top for response window.** Tried KWin scripting via qdbus6. Script loaded without errors but had no visible effect on Wayland. Deferred — a future tray app could focus the response window instead.
+- **Always-on-top for response window.** Tried KWin scripting via qdbus6. Script loaded without errors but had no visible effect on Wayland. Deferred — a future tray app (Phase 7) could focus the response window instead.
+- **yad as the prompt-dialog tool.** yad's `webkit2gtk-4.1` dep is 133 MiB and the CachyOS v3 mirrors were 404-ing on multiple transitive deps. Replaced with PyQt6 (already installed via KDE Plasma) — zero new deps and a native Qt look.
+- **System tray as a standalone Phase 5.** Hotkeys already cover every invocation; the tray would only add at-a-glance status and response-flash. Not worth a dedicated phase. Folded into Phase 7 (rich GUI) where it belongs alongside the larger frontend.
 
-## Session Resume Design (Phase 3 — planned)
+## Session Resume Design (Phase 3 — done)
 
 ### Rejected approach
 
@@ -78,14 +80,18 @@ Benefits:
 ## Directly Next
 
 - **Bind KDE global shortcuts.** Super+S → `jippity --mode region`, etc. See `jippity-setup` output. Super+H → `jippity --history`.
-- **Tray app (Phase 5).** System tray with quick action buttons, recent history access.
+- **Phase 4.6: Active-thread visibility in history viewer.** Today the active thread is only identifiable by single-clicking rows until you see the "(currently active)" suffix. Three additions to `jippity-history`:
+  1. **List-row marker** — prefix the active thread's row with `▸` (or a ★ glyph) in the thread list, so it's visible without selecting anything.
+  2. **Persistent status bar** — a line above the search box (or below the list) showing `Active: <first-prompt preview> · <last-timestamp>`, always visible.
+  3. **Bold active row** — apply `QFont.Weight.Bold` to the active thread's row label so it stands out at a glance.
+- **No standalone tray phase.** Tray app folded into Phase 7 (rich GUI).
 
 ## Longer-Term Vision (Phase 6–7)
 
 | Phase | Feature |
 |-------|---------|
 | 6 | Voice input (off by default, toggleable) |
-| 7 | Rich GUI — Tauri, Qt, or GTK frontend wrapping the proven core |
+| 7 | Rich GUI with system tray — Tauri, Qt, or GTK frontend wrapping the proven core. Tray adds at-a-glance status (active thread, last mode, response arrival) without changing invocation: hotkeys remain primary. |
 
 ## Repo
 

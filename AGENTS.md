@@ -35,6 +35,7 @@ A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex
 - **Local thread resume** — instead of `codex exec resume`, reconstruct conversation history from local `history.jsonl` and prepend to the new prompt. More reliable, no dependency on codex session store, works even if codex clears sessions.
 - **Combined prompt dialog** — uses a tiny PyQt6 helper (`jippity-prompt`) if available (input + continue-thread checkbox in one native Qt dialog), falls back to `kdialog --inputbox` + `kdialog --yesno`. No separate toggle/reset flow — checkbox is sticky across runs.
 - **History viewer** — `jippity --history` launches a PyQt6 window (`jippity-history`) listing threads (most recent first), full transcript on selection, search across prompts+responses, multi-select delete (also removes screenshot files), and "Set as Active Thread" (writes THREAD_ID + CONTINUE_DEFAULT=true so next prompt auto-continues).
+- **JSONL storage** — entries are written via `jq -nc` (compact, one per line). The viewer's parser is tolerant of legacy pretty-printed entries and migrates them to compact form on the first delete.
 - **Dynamic dialog sizing** — `fold -w 80` for visual line estimate, `height = lines × 22px + 100px`, clamped 120–800px.
 - **Spectacle noise suppressed** — stderr to `/dev/null`.
 - **Notification** — `kdialog --passivepopup` after each response.
@@ -50,9 +51,10 @@ A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex
 | 3 | Session resume via local history reconstruction | Done |
 | 4 | History storage (prompt, response, screenshot, timestamp) | Done |
 | 4.5 | History viewer (`jippity --history`) | Done |
-| 5 | Tray app | Next |
+| 4.6 | Active-thread visibility in history viewer | Next |
+| 5 | *(folded into Phase 7)* | — |
 | 6 | Voice input | Future |
-| 7 | Rich GUI (Tauri/Qt/GTK/Electron) | Future |
+| 7 | Rich GUI + tray (Tauri/Qt/GTK/Electron) | Future |
 
 ## Hotkeys (not yet bound)
 

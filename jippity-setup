@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Jippity setup — create config dirs and print KDE hotkey instructions
+set -euo pipefail
+
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/jippity"
+HISTORY_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/jippity"
+
+mkdir -p "$CONFIG_DIR" "$HISTORY_DIR"/{screenshots,responses,logs}
+
+# Default state file if missing
+STATE_FILE="$CONFIG_DIR/state"
+if [ ! -f "$STATE_FILE" ]; then
+    cat > "$STATE_FILE" << EOF
+THREAD_ID=""
+LAST_MODE=""
+CONTINUE_DEFAULT=false
+EOF
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+cat << EOF
+Jippity directories created:
+  Config:  $CONFIG_DIR
+  History: $HISTORY_DIR
+  State:   $CONFIG_DIR/state
+
+Dependencies:
+  - kdialog, spectacle, jq: already in your KDE install
+  - PyQt6 (optional): enables a combined input + continue-thread checkbox dialog.
+    Already installed on KDE Plasma systems. Fall back is a two-step kdialog flow.
+
+To bind KDE global shortcuts:
+
+  1. Open System Settings > Shortcuts > Custom Shortcuts
+  2. Add four new shortcuts:
+
+     Trigger: Super+S
+     Action: Command/URL: $SCRIPT_DIR/jippity --mode region
+
+     Trigger: Super+W
+     Action: Command/URL: $SCRIPT_DIR/jippity --mode screen
+
+     Trigger: Super+A
+     Action: Command/URL: $SCRIPT_DIR/jippity --mode window
+
+     Trigger: Super+Q
+     Action: Command/URL: $SCRIPT_DIR/jippity --mode quick
+
+Commands:
+  $SCRIPT_DIR/jippity --mode <region|screen|window|quick>   Ask a question
+
+Continue-thread flow:
+  - When a thread exists, the dialog shows a "Continue thread" checkbox
+  - Default: unchecked (one-off question). Sticky: your last checkbox choice
+    is remembered for next time.
+  - Check it to send prior conversation context with your new prompt
+  - Uncheck it to start a fresh thread
+EOF

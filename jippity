@@ -15,6 +15,21 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# --- Paths ---
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/jippity"
+HISTORY_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/jippity"
+TMPDIR="${TMPDIR:-/tmp}/jippity"
+mkdir -p "$TMPDIR" "$CONFIG_DIR" "$HISTORY_DIR"/{screenshots,responses,logs}
+STATE_FILE="$CONFIG_DIR/state"
+HISTORY_FILE="$HISTORY_DIR/history.jsonl"
+
+# --- Load state ---
+THREAD_ID=""
+LAST_MODE=""
+CONTINUE_DEFAULT=false
+[ -f "$STATE_FILE" ] && source "$STATE_FILE"
+
+# --- Validate mode ---
 case "$MODE" in
     region)  SCREENSHOT_FLAG="-r"; PROMPT_TEXT="Ask about this region:"  ;;
     screen)  SCREENSHOT_FLAG="-f"; PROMPT_TEXT="Ask about this screen:"  ;;
@@ -23,41 +38,127 @@ case "$MODE" in
     *)       usage ;;
 esac
 
-TMPDIR="${TMPDIR:-/tmp}/jippity"
-mkdir -p "$TMPDIR"
-
+# --- Screenshot ---
 STAMP=$(date +%s)
-OUTFILE="$TMPDIR/response_$STAMP.txt"
-LOGFILE="$TMPDIR/last_run_$STAMP.log"
-
+SCREENSHOT=""
 if [ -n "$SCREENSHOT_FLAG" ]; then
-    SCREENSHOT="$TMPDIR/${MODE}_$STAMP.png"
-    spectacle "$SCREENSHOT_FLAG" -b -n -o "$SCREENSHOT"
+    SCREENSHOT="$HISTORY_DIR/screenshots/${MODE}_$STAMP.png"
+    spectacle "$SCREENSHOT_FLAG" -b -n -o "$SCREENSHOT" 2>/dev/null || true
     if [ ! -f "$SCREENSHOT" ]; then
         kdialog --error "Screenshot was not created."
         exit 1
     fi
 fi
 
-PROMPT=$(kdialog --inputbox "$PROMPT_TEXT")
-if [ $? -ne 0 ] || [ -z "$PROMPT" ]; then
+# --- Prompt dialog (native PyQt6 dialog, or kdialog two-step fallback) ---
+HAS_THREAD=false
+[ -n "$THREAD_ID" ] && [ -f "$HISTORY_FILE" ] && HAS_THREAD=true
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROMPT_HELPER="$SCRIPT_DIR/jippity-prompt"
+
+PROMPT=""
+CONTINUE_FLAG="FALSE"
+
+if python3 -c "import PyQt6" 2>/dev/null && [ -x "$PROMPT_HELPER" ]; then
+    RESULT_FILE=$(mktemp "$TMPDIR/prompt.XXXXXX.json")
+    HAS_THREAD_ARG=0
+    $HAS_THREAD && HAS_THREAD_ARG=1
+    CONTINUE_DEFAULT_ARG=0
+    [ "$CONTINUE_DEFAULT" = true ] && CONTINUE_DEFAULT_ARG=1
+    if "$PROMPT_HELPER" "$RESULT_FILE" "$PROMPT_TEXT" "$HAS_THREAD_ARG" "$CONTINUE_DEFAULT_ARG" </dev/null; then
+        PROMPT=$(jq -r '.prompt // ""' "$RESULT_FILE" 2>/dev/null || true)
+        CONTINUE_FLAG=$(jq -r '.continue // false' "$RESULT_FILE" 2>/dev/null | tr '[:lower:]' '[:upper:]')
+        [ "$CONTINUE_FLAG" = "TRUE" ] || CONTINUE_FLAG="FALSE"
+        [ "$CONTINUE_FLAG" = "TRUE" ] && CONTINUE_DEFAULT=true || CONTINUE_DEFAULT=false
+    fi
+    rm -f "$RESULT_FILE"
+else
+    PROMPT=$(kdialog --inputbox "$PROMPT_TEXT")
+    if [ $? -ne 0 ] || [ -z "$PROMPT" ]; then
+        exit 0
+    fi
+    DEFAULT_BTN="no"
+    [ "$CONTINUE_DEFAULT" = true ] && DEFAULT_BTN="yes"
+    if $HAS_THREAD && kdialog --default "$DEFAULT_BTN" --yesno "Continue previous thread?"; then
+        CONTINUE_FLAG="TRUE"
+        CONTINUE_DEFAULT=true
+    else
+        CONTINUE_DEFAULT=false
+    fi
+fi
+
+if [ -z "$PROMPT" ]; then
     exit 0
 fi
 
-if [ -n "$SCREENSHOT_FLAG" ]; then
-    if ! codex exec -i "$SCREENSHOT" -o "$OUTFILE" -- "$PROMPT" > "$LOGFILE" 2>&1; then
+# --- Determine if continuing or starting fresh ---
+SHOULD_CONTINUE=false
+[ "$CONTINUE_FLAG" = "TRUE" ] && $HAS_THREAD && SHOULD_CONTINUE=true
+
+# --- Reconstruct thread context ---
+CONTEXT=""
+if $SHOULD_CONTINUE; then
+    ENTRIES=$(jq -c --arg tid "$THREAD_ID" 'select(.threadId == $tid)' < "$HISTORY_FILE" 2>/dev/null || true)
+    if [ -n "$ENTRIES" ]; then
+        BLOCK="[Previous conversation]"
+        while IFS= read -r entry; do
+            P=$(echo "$entry" | jq -r '.prompt // empty' 2>/dev/null || true)
+            R=$(echo "$entry" | jq -r '.response // empty' 2>/dev/null || true)
+            [ -n "$P" ] && BLOCK="$BLOCK"$'\n'"User: $P"
+            [ -n "$R" ] && BLOCK="$BLOCK"$'\n'"Jippity: $R"
+        done <<< "$ENTRIES"
+        CONTEXT="$BLOCK"$'\n\n'"---"$'\n\n'"User: $PROMPT"
+    fi
+fi
+[ -z "$CONTEXT" ] && CONTEXT="$PROMPT"
+
+# --- Generate or reuse thread ID ---
+if ! $SHOULD_CONTINUE; then
+    THREAD_ID=$(cat /proc/sys/kernel/random/uuid)
+fi
+
+# --- Run Codex ---
+OUTFILE="$HISTORY_DIR/responses/${MODE}_$STAMP.txt"
+LOGFILE="$HISTORY_DIR/logs/${MODE}_$STAMP.log"
+
+CODEX_BASE=(codex exec --ephemeral --skip-git-repo-check)
+
+if [ -n "$SCREENSHOT" ]; then
+    if ! "${CODEX_BASE[@]}" -i "$SCREENSHOT" -o "$OUTFILE" -- "$CONTEXT" > "$LOGFILE" 2>&1; then
         kdialog --error "Codex exited with an error. See $LOGFILE for details."
         exit 1
     fi
 else
-    if ! codex exec -o "$OUTFILE" -- "$PROMPT" > "$LOGFILE" 2>&1; then
+    if ! "${CODEX_BASE[@]}" -o "$OUTFILE" -- "$CONTEXT" > "$LOGFILE" 2>&1; then
         kdialog --error "Codex exited with an error. See $LOGFILE for details."
         exit 1
     fi
 fi
 
+# --- Read response ---
+RESPONSE=$(cat "$OUTFILE" 2>/dev/null || echo "")
+
+# --- Save state ---
+cat > "$STATE_FILE" << EOF
+THREAD_ID="$THREAD_ID"
+LAST_MODE="$MODE"
+CONTINUE_DEFAULT=$CONTINUE_DEFAULT
+EOF
+
+# --- History ---
+TIMESTAMP=$(date -Iseconds)
+jq -n --arg ts "$TIMESTAMP" --arg mode "$MODE" --arg prompt "$PROMPT" \
+   --arg response "$RESPONSE" --arg ctx "$CONTEXT" --arg img "${SCREENSHOT:-}" \
+   --arg tid "$THREAD_ID" --arg out "$OUTFILE" \
+   '{timestamp: $ts, mode: $mode, prompt: $prompt, response: $response, context: $ctx, imageFile: $img, threadId: $tid, responseFile: $out}' \
+   >> "$HISTORY_FILE" 2>/dev/null || true
+
+# --- Notify ---
+kdialog --passivepopup "Jippity response ready" 3 2>/dev/null || true
+
+# --- Display response ---
 WIDTH=800
-# Estimate visual line count: word-wrap at ~80 chars for better height calc
 LINES=$(fold -w 80 "$OUTFILE" | wc -l)
 [ "$LINES" -lt 1 ] && LINES=1
 HEIGHT=$(( LINES * 22 + 100 ))

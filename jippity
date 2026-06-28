@@ -157,7 +157,7 @@ EOF
 
 # --- History ---
 TIMESTAMP=$(date -Iseconds)
-jq -n --arg ts "$TIMESTAMP" --arg mode "$MODE" --arg prompt "$PROMPT" \
+jq -nc --arg ts "$TIMESTAMP" --arg mode "$MODE" --arg prompt "$PROMPT" \
    --arg response "$RESPONSE" --arg ctx "$CONTEXT" --arg img "${SCREENSHOT:-}" \
    --arg tid "$THREAD_ID" --arg out "$OUTFILE" \
    '{timestamp: $ts, mode: $mode, prompt: $prompt, response: $response, context: $ctx, imageFile: $img, threadId: $tid, responseFile: $out}' \

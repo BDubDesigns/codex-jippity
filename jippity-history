@@ -32,6 +32,9 @@ def state_file():
 def load_threads(history_path):
     """Group history.jsonl entries by threadId into an OrderedDict.
 
+    Tolerates both line-delimited JSONL and pretty-printed multi-line JSON
+    objects (older versions of jippity wrote pretty-printed entries).
+
     Returns list of dicts: {thread_id, entries: [entry, ...],
     first_prompt, first_ts, last_ts, count}. Sorted later by caller.
     """
@@ -39,20 +42,29 @@ def load_threads(history_path):
     if not os.path.exists(history_path):
         return []
     with open(history_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entry = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            tid = entry.get("threadId", "")
-            if not tid:
-                continue
-            if tid not in threads:
-                threads[tid] = {"thread_id": tid, "entries": []}
-            threads[tid]["entries"].append(entry)
+        raw = f.read()
+    parser = json.JSONDecoder()
+    i = 0
+    n = len(raw)
+    while i < n:
+        c = raw[i]
+        if c.isspace():
+            i += 1
+            continue
+        try:
+            entry, end = parser.raw_decode(raw, i)
+            i = end
+        except json.JSONDecodeError:
+            i += 1
+            continue
+        if not isinstance(entry, dict):
+            continue
+        tid = entry.get("threadId", "")
+        if not tid:
+            continue
+        if tid not in threads:
+            threads[tid] = {"thread_id": tid, "entries": []}
+        threads[tid]["entries"].append(entry)
     result = []
     for tid, t in threads.items():
         entries = t["entries"]
@@ -122,38 +134,48 @@ def write_state(thread_id, last_mode, cont_default):
 def rewrite_history_without(history_path, exclude_ids):
     """Remove all entries whose threadId is in exclude_ids. Also delete
     any referenced screenshot files. Returns (kept_count, removed_count,
-    deleted_files)."""
+    deleted_files). Rewrites the file as compact JSONL (one entry per line)
+    so any pretty-printed legacy entries are migrated on first delete.
+    """
     kept = []
     removed = 0
     deleted_files = []
     if not os.path.exists(history_path):
         return 0, 0, []
     with open(history_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entry = json.loads(line)
-            except json.JSONDecodeError:
-                kept.append(line)
-                continue
-            tid = entry.get("threadId", "")
-            if tid in exclude_ids:
-                removed += 1
-                img = entry.get("imageFile", "")
-                if img and os.path.exists(img):
-                    try:
-                        os.remove(img)
-                        deleted_files.append(img)
-                    except OSError:
-                        pass
-            else:
-                kept.append(line)
+        raw = f.read()
+    parser = json.JSONDecoder()
+    i = 0
+    n = len(raw)
+    while i < n:
+        c = raw[i]
+        if c.isspace():
+            i += 1
+            continue
+        try:
+            entry, end = parser.raw_decode(raw, i)
+            i = end
+        except json.JSONDecodeError:
+            i += 1
+            continue
+        if not isinstance(entry, dict):
+            continue
+        tid = entry.get("threadId", "")
+        if tid in exclude_ids:
+            removed += 1
+            img = entry.get("imageFile", "")
+            if img and os.path.exists(img):
+                try:
+                    os.remove(img)
+                    deleted_files.append(img)
+                except OSError:
+                    pass
+        else:
+            kept.append(entry)
     tmp = history_path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        for line in kept:
-            f.write(line + "\n")
+        for entry in kept:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     os.replace(tmp, history_path)
     return len(kept), removed, deleted_files
 

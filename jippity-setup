@@ -47,8 +47,12 @@ To bind KDE global shortcuts:
      Trigger: Super+Q
      Action: Command/URL: $SCRIPT_DIR/jippity --mode quick
 
+     Trigger: Super+H
+     Action: Command/URL: $SCRIPT_DIR/jippity --history
+
 Commands:
   $SCRIPT_DIR/jippity --mode <region|screen|window|quick>   Ask a question
+  $SCRIPT_DIR/jippity --history                             Browse/search/delete threads, set active
 
 Continue-thread flow:
   - When a thread exists, the dialog shows a "Continue thread" checkbox
@@ -56,4 +60,12 @@ Continue-thread flow:
     is remembered for next time.
   - Check it to send prior conversation context with your new prompt
   - Uncheck it to start a fresh thread
+
+History viewer (Super+H):
+  - Lists threads (most recent first) with exchange count and timestamp
+  - Click a thread to read the full transcript
+  - Search across prompts and responses
+  - Multi-select threads (Ctrl-click) and Delete to remove them and their screenshots
+  - "Set as Active Thread" makes the chosen thread active and pre-checks the
+    continue checkbox for the next prompt
 EOF

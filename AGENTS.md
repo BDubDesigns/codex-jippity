@@ -6,15 +6,17 @@ A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex
 
 ## Current state
 
-**Phases 0–4 implemented.** Code exists, tested on this machine.
+**Phases 0–4 + history viewer implemented.** Code exists, tested on this machine.
 
 | Script | Purpose |
 |--------|---------|
-| `jippity` | Shared core: `jippity --mode <region\|screen\|window\|quick>` |
+| `jippity` | Shared core: `jippity --mode <region\|screen\|window\|quick>` · `jippity --history` |
 | `jippity-window` | Wrapper → `jippity --mode window` |
 | `jippity-screen` | Wrapper → `jippity --mode screen` |
 | `jippity-region` | Wrapper → `jippity --mode region` |
 | `jippity-quick` | Wrapper → `jippity --mode quick` |
+| `jippity-prompt` | PyQt6 helper: prompt input + continue-thread checkbox dialog |
+| `jippity-history` | PyQt6 helper: browse/search/delete threads, set active thread |
 | `jippity-setup` | Create dirs, print KDE hotkey instructions |
 
 ## Key design facts
@@ -32,6 +34,7 @@ A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex
 - **`--ephemeral`** — all `codex exec` calls use `--ephemeral` to avoid polluting codex's session store with one-off questions.
 - **Local thread resume** — instead of `codex exec resume`, reconstruct conversation history from local `history.jsonl` and prepend to the new prompt. More reliable, no dependency on codex session store, works even if codex clears sessions.
 - **Combined prompt dialog** — uses a tiny PyQt6 helper (`jippity-prompt`) if available (input + continue-thread checkbox in one native Qt dialog), falls back to `kdialog --inputbox` + `kdialog --yesno`. No separate toggle/reset flow — checkbox is sticky across runs.
+- **History viewer** — `jippity --history` launches a PyQt6 window (`jippity-history`) listing threads (most recent first), full transcript on selection, search across prompts+responses, multi-select delete (also removes screenshot files), and "Set as Active Thread" (writes THREAD_ID + CONTINUE_DEFAULT=true so next prompt auto-continues).
 - **Dynamic dialog sizing** — `fold -w 80` for visual line estimate, `height = lines × 22px + 100px`, clamped 120–800px.
 - **Spectacle noise suppressed** — stderr to `/dev/null`.
 - **Notification** — `kdialog --passivepopup` after each response.
@@ -46,6 +49,7 @@ A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex
 | 2 | Shared core: `jippity --mode <mode>` | Done |
 | 3 | Session resume via local history reconstruction | Done |
 | 4 | History storage (prompt, response, screenshot, timestamp) | Done |
+| 4.5 | History viewer (`jippity --history`) | Done |
 | 5 | Tray app | Next |
 | 6 | Voice input | Future |
 | 7 | Rich GUI (Tauri/Qt/GTK/Electron) | Future |
@@ -58,6 +62,7 @@ A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex
 | Super+W | `jippity --mode screen` | Full screen → prompt → Codex |
 | Super+A | `jippity --mode window` | Active window → prompt → Codex |
 | Super+Q | `jippity --mode quick` | Prompt only → Codex |
+| Super+H | `jippity --history` | Browse/search/delete threads, set active |
 
 ## Error handling
 

@@ -78,9 +78,9 @@ else
     if [ $? -ne 0 ] || [ -z "$PROMPT" ]; then
         exit 0
     fi
-    DEFAULT_MSG="Continue previous thread? (default: no)"
-    [ "$CONTINUE_DEFAULT" = true ] && DEFAULT_MSG="Continue previous thread? (default: yes)"
-    if $HAS_THREAD && kdialog --default yesno --yesno "$DEFAULT_MSG"; then
+    DEFAULT_BTN="no"
+    [ "$CONTINUE_DEFAULT" = true ] && DEFAULT_BTN="yes"
+    if $HAS_THREAD && kdialog --default "$DEFAULT_BTN" --yesno "Continue previous thread?"; then
         CONTINUE_FLAG="TRUE"
         CONTINUE_DEFAULT=true
     else

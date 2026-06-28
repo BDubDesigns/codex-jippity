@@ -3,19 +3,13 @@ set -euo pipefail
 
 usage() {
     echo "Usage: jippity --mode <region|screen|window|quick>"
-    echo "       jippity --toggle"
-    echo "       jippity --reset"
     exit 1
 }
 
 MODE=""
-DO_TOGGLE=false
-DO_RESET=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --mode) MODE="$2"; shift 2 ;;
-        --toggle) DO_TOGGLE=true; shift ;;
-        --reset) DO_RESET=true; shift ;;
         --help|-h) usage ;;
         *) usage ;;
     esac
@@ -31,41 +25,9 @@ HISTORY_FILE="$HISTORY_DIR/history.jsonl"
 
 # --- Load state ---
 THREAD_ID=""
-THREAD_MODE="one-shot"
 LAST_MODE=""
+CONTINUE_DEFAULT=false
 [ -f "$STATE_FILE" ] && source "$STATE_FILE"
-
-# --- Handle --toggle ---
-if [ "$DO_TOGGLE" = true ]; then
-    if [ "$THREAD_MODE" = "continue" ]; then
-        THREAD_MODE="one-shot"
-        MSG="Jippity: one-shot mode"
-    else
-        THREAD_MODE="continue"
-        MSG="Jippity: continue-thread mode"
-    fi
-    cat > "$STATE_FILE" << EOF
-THREAD_ID="$THREAD_ID"
-THREAD_MODE="$THREAD_MODE"
-LAST_MODE="$LAST_MODE"
-EOF
-    kdialog --passivepopup "$MSG" 3 2>/dev/null || echo "$MSG"
-    exit 0
-fi
-
-# --- Handle --reset ---
-if [ "$DO_RESET" = true ]; then
-    THREAD_ID=""
-    THREAD_MODE="one-shot"
-    LAST_MODE=""
-    cat > "$STATE_FILE" << EOF
-THREAD_ID="$THREAD_ID"
-THREAD_MODE="$THREAD_MODE"
-LAST_MODE="$LAST_MODE"
-EOF
-    kdialog --passivepopup "Jippity: session reset (one-shot mode)" 3 2>/dev/null || echo "Session reset (one-shot mode)"
-    exit 0
-fi
 
 # --- Validate mode ---
 case "$MODE" in
@@ -81,22 +43,62 @@ STAMP=$(date +%s)
 SCREENSHOT=""
 if [ -n "$SCREENSHOT_FLAG" ]; then
     SCREENSHOT="$HISTORY_DIR/screenshots/${MODE}_$STAMP.png"
-    spectacle "$SCREENSHOT_FLAG" -b -n -o "$SCREENSHOT" 2>/dev/null
+    spectacle "$SCREENSHOT_FLAG" -b -n -o "$SCREENSHOT" 2>/dev/null || true
     if [ ! -f "$SCREENSHOT" ]; then
         kdialog --error "Screenshot was not created."
         exit 1
     fi
 fi
 
-# --- Prompt ---
-PROMPT=$(kdialog --inputbox "$PROMPT_TEXT")
-if [ $? -ne 0 ] || [ -z "$PROMPT" ]; then
+# --- Prompt dialog (native PyQt6 dialog, or kdialog two-step fallback) ---
+HAS_THREAD=false
+[ -n "$THREAD_ID" ] && [ -f "$HISTORY_FILE" ] && HAS_THREAD=true
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROMPT_HELPER="$SCRIPT_DIR/jippity-prompt"
+
+PROMPT=""
+CONTINUE_FLAG="FALSE"
+
+if python3 -c "import PyQt6" 2>/dev/null && [ -x "$PROMPT_HELPER" ]; then
+    RESULT_FILE=$(mktemp "$TMPDIR/prompt.XXXXXX.json")
+    HAS_THREAD_ARG=0
+    $HAS_THREAD && HAS_THREAD_ARG=1
+    CONTINUE_DEFAULT_ARG=0
+    [ "$CONTINUE_DEFAULT" = true ] && CONTINUE_DEFAULT_ARG=1
+    if "$PROMPT_HELPER" "$RESULT_FILE" "$PROMPT_TEXT" "$HAS_THREAD_ARG" "$CONTINUE_DEFAULT_ARG" </dev/null; then
+        PROMPT=$(jq -r '.prompt // ""' "$RESULT_FILE" 2>/dev/null || true)
+        CONTINUE_FLAG=$(jq -r '.continue // false' "$RESULT_FILE" 2>/dev/null | tr '[:lower:]' '[:upper:]')
+        [ "$CONTINUE_FLAG" = "TRUE" ] || CONTINUE_FLAG="FALSE"
+        [ "$CONTINUE_FLAG" = "TRUE" ] && CONTINUE_DEFAULT=true || CONTINUE_DEFAULT=false
+    fi
+    rm -f "$RESULT_FILE"
+else
+    PROMPT=$(kdialog --inputbox "$PROMPT_TEXT")
+    if [ $? -ne 0 ] || [ -z "$PROMPT" ]; then
+        exit 0
+    fi
+    DEFAULT_MSG="Continue previous thread? (default: no)"
+    [ "$CONTINUE_DEFAULT" = true ] && DEFAULT_MSG="Continue previous thread? (default: yes)"
+    if $HAS_THREAD && kdialog --default yesno --yesno "$DEFAULT_MSG"; then
+        CONTINUE_FLAG="TRUE"
+        CONTINUE_DEFAULT=true
+    else
+        CONTINUE_DEFAULT=false
+    fi
+fi
+
+if [ -z "$PROMPT" ]; then
     exit 0
 fi
 
-# --- Reconstruct thread context (continue mode) ---
+# --- Determine if continuing or starting fresh ---
+SHOULD_CONTINUE=false
+[ "$CONTINUE_FLAG" = "TRUE" ] && $HAS_THREAD && SHOULD_CONTINUE=true
+
+# --- Reconstruct thread context ---
 CONTEXT=""
-if [ "$THREAD_MODE" = "continue" ] && [ -n "$THREAD_ID" ] && [ -f "$HISTORY_FILE" ]; then
+if $SHOULD_CONTINUE; then
     ENTRIES=$(jq -c --arg tid "$THREAD_ID" 'select(.threadId == $tid)' < "$HISTORY_FILE" 2>/dev/null || true)
     if [ -n "$ENTRIES" ]; then
         BLOCK="[Previous conversation]"
@@ -111,10 +113,8 @@ if [ "$THREAD_MODE" = "continue" ] && [ -n "$THREAD_ID" ] && [ -f "$HISTORY_FILE
 fi
 [ -z "$CONTEXT" ] && CONTEXT="$PROMPT"
 
-# --- Generate thread ID for new threads ---
-if [ "$THREAD_MODE" = "continue" ] && [ -z "$THREAD_ID" ]; then
-    THREAD_ID=$(cat /proc/sys/kernel/random/uuid)
-elif [ "$THREAD_MODE" != "continue" ]; then
+# --- Generate or reuse thread ID ---
+if ! $SHOULD_CONTINUE; then
     THREAD_ID=$(cat /proc/sys/kernel/random/uuid)
 fi
 
@@ -142,8 +142,8 @@ RESPONSE=$(cat "$OUTFILE" 2>/dev/null || echo "")
 # --- Save state ---
 cat > "$STATE_FILE" << EOF
 THREAD_ID="$THREAD_ID"
-THREAD_MODE="$THREAD_MODE"
 LAST_MODE="$MODE"
+CONTINUE_DEFAULT=$CONTINUE_DEFAULT
 EOF
 
 # --- History ---

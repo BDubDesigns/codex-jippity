@@ -12,8 +12,8 @@ STATE_FILE="$CONFIG_DIR/state"
 if [ ! -f "$STATE_FILE" ]; then
     cat > "$STATE_FILE" << EOF
 THREAD_ID=""
-THREAD_MODE="one-shot"
 LAST_MODE=""
+CONTINUE_DEFAULT=false
 EOF
 fi
 
@@ -24,6 +24,11 @@ Jippity directories created:
   Config:  $CONFIG_DIR
   History: $HISTORY_DIR
   State:   $CONFIG_DIR/state
+
+Dependencies:
+  - kdialog, spectacle, jq: already in your KDE install
+  - PyQt6 (optional): enables a combined input + continue-thread checkbox dialog.
+    Already installed on KDE Plasma systems. Fall back is a two-step kdialog flow.
 
 To bind KDE global shortcuts:
 
@@ -42,15 +47,13 @@ To bind KDE global shortcuts:
      Trigger: Super+Q
      Action: Command/URL: $SCRIPT_DIR/jippity --mode quick
 
-  Optional:
-     Trigger: Super+R
-     Action: Command/URL: $SCRIPT_DIR/jippity --reset
-
-     Trigger: Super+T
-     Action: Command/URL: $SCRIPT_DIR/jippity --toggle
-
 Commands:
   $SCRIPT_DIR/jippity --mode <region|screen|window|quick>   Ask a question
-  $SCRIPT_DIR/jippity --toggle                                Toggle continue-thread mode
-  $SCRIPT_DIR/jippity --reset                                 Reset session to one-shot
+
+Continue-thread flow:
+  - When a thread exists, the dialog shows a "Continue thread" checkbox
+  - Default: unchecked (one-off question). Sticky: your last checkbox choice
+    is remembered for next time.
+  - Check it to send prior conversation context with your new prompt
+  - Uncheck it to start a fresh thread
 EOF

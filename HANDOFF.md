@@ -12,17 +12,18 @@ Shared core via `jippity --mode <region|screen|window|quick>` with four thin wra
 | `jippity-quick` | `jippity --mode quick` |
 
 Additional commands:
-- `jippity-toggle` — switches between one-shot and continue-thread mode
-- `jippity-reset` — clears thread, resets to one-shot mode
 - `jippity-setup` — creates directories, prints KDE hotkey binding instructions
+
+Toolbar removed:
+- `jippity-toggle` / `jippity-reset` — deleted. The continue-thread checkbox replaced toggle; reset is no longer a separate script.
 
 ### Key design decisions (already built)
 
 - **Shared core refactored.** `jippity --mode <mode>` handles all modes; wrappers are one-liner `exec` calls.
-- **Clean output via `-o` flag.** `codex exec --output-last-message <file>` writes only the final response, no metadata header.
+- **Clean output via `-o` flag.** `codex exec -o <file>` writes only the final response, no metadata header.
 - **Dynamic dialog sizing.** `fold -w 80` estimates visual wrapped lines; height = (lines × 22px + 100px), clamped 120–800px.
 - **Persistent storage.** Screenshots, responses, logs under `~/.local/share/jippity/`. History appended to `history.jsonl` (JSONL: timestamp, mode, prompt, responseFile, imageFile).
-- **State file at `~/.config/jippity/state`.** Tracks `THREAD_ID`, `THREAD_MODE` (one-shot/continue), `LAST_MODE`.
+- **State file at `~/.config/jippity/state`.** Tracks `THREAD_ID`, `LAST_MODE`, `CONTINUE_DEFAULT` (sticky checkbox state). No persistent mode toggle — continue decision is made per-query via checkbox.
 - **Spectacle noise suppressed.** Stderr redirected to `/dev/null` to hide Tesseract library warnings.
 - **Notification popup.** `kdialog --passivepopup "Jippity response ready" 3` after each completion.
 - **No streaming.** Blocks for full response. Streaming possible later.
@@ -33,7 +34,8 @@ Additional commands:
 - `codex exec -i <image> -o <file> -- <prompt>` — one-shot non-interactive with image
 - `codex exec resume --last -i <image> -o <file> -- <prompt>` — session continuation (alternative approach, not used)
 - `kdialog --inputbox`, `--textbox`, `--passivepopup` — all dialog types work
-- State file round-trip: toggle writes, source reads, reset clears
+- `jippity-prompt` (PyQt6 helper) — combined input + continue-thread checkbox in one native Qt dialog
+- Thread reconstruction from `history.jsonl` — match entries by THREAD_ID, format as conversation block, prepend to prompt
 
 ### What didn't work
 
@@ -49,38 +51,31 @@ Initial implementation used `codex exec resume <session_id>` to continue threads
 - One-off jippity questions polluted codex's session browser
 - Brittle — breaks if codex changes session storage format
 
-### Current plan: local history reconstruction
+### Current approach: local history reconstruction (implemented)
 
-All `codex exec` calls use `--ephemeral` to avoid polluting codex's session store. Thread continuity is handled locally:
+All `codex exec` calls use `--ephemeral`. Thread continuity is handled locally:
 
-1. **State file** stores a `THREAD_ID` (UUID Jippity generates) and `THREAD_MODE` (one-shot or continue).
+1. **State file** stores `THREAD_ID` (UUID Jippity generates), `LAST_MODE`, `CONTINUE_DEFAULT` (sticky checkbox state).
 2. **History file** (`history.jsonl`) stores every exchange with its `THREAD_ID`, prompt, response, screenshot path, timestamp.
-3. On a **continue** run, read all history entries with the same `THREAD_ID`, format them as a plain-text conversation block, and prepend to the new prompt:
-
-```
-[Previous conversation]
-User: remember the cat hunts at midnight
-Jippity: I'll remember that. The cat hunts at midnight.
-[New message]
-User: what did I send last?
-```
-
-4. Send the assembled context + new prompt to `codex exec --ephemeral -o <file>`.
-5. Save the new exchange to `history.jsonl` with the same `THREAD_ID`.
-6. A **reset** generates a new `THREAD_ID` and switches back to one-shot mode.
+3. Continue decision is made **per-query** via:
+   - `jippity-prompt` PyQt6 helper (preferred — single dialog with prompt + checkbox, checkbox state is sticky)
+   - `kdialog --yesno` fallback (and `kdialog --inputbox` for prompt)
+4. If continued: read all history entries with the same `THREAD_ID`, format as conversation block, prepend to the new prompt.
+5. Send assembled context to `codex exec --ephemeral -o <file>`.
+6. Save the new exchange to `history.jsonl`.
+7. Unchecking the checkbox starts a fresh thread with a new `THREAD_ID`.
 
 Benefits:
 - Zero dependency on codex session store. Works even if codex clears sessions.
 - No pollution of codex's session browser.
-- Full control over context window (can truncate, summarize, or prune old history).
+- Full control over context window.
 - Resilient to codex updates.
-- Same token cost — the model sees the same conversation either way.
+- No persistent mode toggle — less confusing UX.
 
 ## Directly Next
 
-- **Implement local history reconstruction** for session resume (Phase 3).
 - **Bind KDE global shortcuts.** Super+S → `jippity --mode region`, etc. See `jippity-setup` output.
-- **Tray app (Phase 5).** System tray with quick action buttons, session toggle, recent history access.
+- **Tray app (Phase 5).** System tray with quick action buttons, recent history access.
 
 ## Longer-Term Vision (Phase 6–7)
 

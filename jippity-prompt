@@ -144,19 +144,26 @@ def main():
             if not voice_state["recording"]:
                 return
             proc = voice_state["proc"]
+            wav = voice_state["wav"]
             voice_state["recording"] = False
             voice_state["proc"] = None
+            voice_state["wav"] = None
+            # Reset button immediately so the UI reflects release-before-work
+            voice_btn.setText("🎙  Hold to Talk")
+            voice_btn.setStyleSheet("")
+            voice_btn.setEnabled(False)
+            voice_btn.setText("Transcribing…")
+            # Force the UI to repaint before the blocking transcribe
+            app.processEvents()
             if proc is not None:
                 proc.send_signal(subprocess.signal.SIGINT)
                 try:
                     proc.wait(timeout=2)
                 except subprocess.TimeoutExpired:
                     proc.kill()
-            voice_btn.setText("🎙  Hold to Talk")
-            voice_btn.setStyleSheet("")
-            wav = voice_state["wav"]
-            voice_state["wav"] = None
             if not wav or not os.path.exists(wav):
+                voice_btn.setEnabled(True)
+                voice_btn.setText("🎙  Hold to Talk")
                 return
             try:
                 result = subprocess.run(
@@ -166,19 +173,22 @@ def main():
                 )
             except subprocess.TimeoutExpired:
                 sys.stderr.write("whisper timed out\n")
+                voice_btn.setEnabled(True)
+                voice_btn.setText("🎙  Hold to Talk")
                 return
             finally:
                 try:
                     os.remove(wav)
                 except OSError:
                     pass
+            voice_btn.setEnabled(True)
+            voice_btn.setText("🎙  Hold to Talk")
             if result.returncode != 0:
                 sys.stderr.write(f"whisper failed: {result.stderr}\n")
                 return
             transcript = result.stdout.strip()
             if not transcript:
                 return
-            # Insert at cursor position, replacing any selection
             edit.insert(transcript + " ")
             edit.setFocus()
 

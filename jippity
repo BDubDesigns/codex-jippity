@@ -4,27 +4,24 @@ set -euo pipefail
 usage() {
     echo "Usage: jippity --mode <region|screen|window|quick>"
     echo "       jippity --history"
+    echo "       jippity --voice"
     exit 1
 }
 
 MODE=""
 DO_HISTORY=false
+DO_VOICE=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --mode) MODE="$2"; shift 2 ;;
         --history) DO_HISTORY=true; shift ;;
+        --voice) DO_VOICE=true; shift ;;
         --help|-h) usage ;;
         *) usage ;;
     esac
 done
 
-# --- Handle --history (delegate to standalone PyQt6 viewer) ---
-if [ "$DO_HISTORY" = true ]; then
-    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-    exec "$SCRIPT_DIR/jippity-history"
-fi
-
-# --- Paths ---
+# --- Paths (needed for state toggle before history) ---
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/jippity"
 HISTORY_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/jippity"
 TMPDIR="${TMPDIR:-/tmp}/jippity"
@@ -38,6 +35,31 @@ LAST_MODE=""
 CONTINUE_DEFAULT=false
 VOICE_ENABLED=false
 [ -f "$STATE_FILE" ] && source "$STATE_FILE"
+
+# --- Handle --history (delegate to standalone PyQt6 viewer) ---
+if [ "$DO_HISTORY" = true ]; then
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    exec "$SCRIPT_DIR/jippity-history"
+fi
+
+# --- Handle --voice (toggle voice on/off, persist, exit) ---
+if [ "$DO_VOICE" = true ]; then
+    if [ "$VOICE_ENABLED" = true ]; then
+        VOICE_ENABLED=false
+        MSG="Jippity: voice OFF"
+    else
+        VOICE_ENABLED=true
+        MSG="Jippity: voice ON"
+    fi
+    cat > "$STATE_FILE" << EOF
+THREAD_ID="$THREAD_ID"
+LAST_MODE="$LAST_MODE"
+CONTINUE_DEFAULT=$CONTINUE_DEFAULT
+VOICE_ENABLED=$VOICE_ENABLED
+EOF
+    kdialog --passivepopup "$MSG" 3 2>/dev/null || echo "$MSG"
+    exit 0
+fi
 
 # --- Validate mode ---
 case "$MODE" in

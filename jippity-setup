@@ -32,7 +32,7 @@ Dependencies:
     Already installed on KDE Plasma systems. Fall back is a two-step kdialog flow.
   - Voice input (optional, off by default):
       Install: paru -S whisper.cpp whisper.cpp-model-small.en
-      Enable:  edit $CONFIG_DIR/state and set VOICE_ENABLED=true
+      Enable:  $SCRIPT_DIR/jippity --voice
       Use:     hold Alt (or the on-screen "Hold to Talk" button) while the
                prompt dialog is open. Release to transcribe into the box.
                Edit the transcription before pressing Enter if needed.

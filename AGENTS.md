@@ -6,11 +6,11 @@ A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex
 
 ## Current state
 
-**Phases 0–4.6 + voice input (Phase 6) implemented.** Code exists, tested on this machine.
+**Phases 0–4.6 + voice input (Phase 6) implemented, voice install pending.** Code exists, tested on this machine.
 
 | Script | Purpose |
 |--------|---------|
-| `jippity` | Shared core: `jippity --mode <region\|screen\|window\|quick>` · `jippity --history` |
+| `jippity` | Shared core: `jippity --mode <region\|screen\|window\|quick>` · `jippity --history` · `jippity --voice` |
 | `jippity-window` | Wrapper → `jippity --mode window` |
 | `jippity-screen` | Wrapper → `jippity --mode screen` |
 | `jippity-region` | Wrapper → `jippity --mode region` |
@@ -66,6 +66,7 @@ A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex
 | Super+A | `jippity --mode window` | Active window → prompt → Codex |
 | Super+Q | `jippity --mode quick` | Prompt only → Codex |
 | Super+H | `jippity --history` | Browse/search/delete threads, set active |
+| Super+V | `jippity --voice` | Toggle voice input on/off |
 
 ## Error handling
 

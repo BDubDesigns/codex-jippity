@@ -94,7 +94,7 @@ Hold-to-talk transcription wired into `jippity-prompt`. No new Python deps; uses
 ```
 paru -S whisper.cpp whisper.cpp-model-small.en
 ```
-Then edit `~/.config/jippity/state` and set `VOICE_ENABLED=true`.
+Then run `jippity --voice` to toggle voice on (off by default). A passivepopup confirms the new state. State persists in `~/.config/jippity/state`.
 
 If whisper.cpp latency becomes annoying (model load per utterance, ~1–2 s), swap backend to `python-faster-whisper` (AUR) which keeps the model loaded in-process. The `jippity-prompt` voice block is isolated enough to swap the transcribe function without touching callers.
 

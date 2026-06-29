@@ -36,6 +36,7 @@ HISTORY_FILE="$HISTORY_DIR/history.jsonl"
 THREAD_ID=""
 LAST_MODE=""
 CONTINUE_DEFAULT=false
+VOICE_ENABLED=false
 [ -f "$STATE_FILE" ] && source "$STATE_FILE"
 
 # --- Validate mode ---
@@ -75,7 +76,9 @@ if python3 -c "import PyQt6" 2>/dev/null && [ -x "$PROMPT_HELPER" ]; then
     $HAS_THREAD && HAS_THREAD_ARG=1
     CONTINUE_DEFAULT_ARG=0
     [ "$CONTINUE_DEFAULT" = true ] && CONTINUE_DEFAULT_ARG=1
-    if "$PROMPT_HELPER" "$RESULT_FILE" "$PROMPT_TEXT" "$HAS_THREAD_ARG" "$CONTINUE_DEFAULT_ARG" </dev/null; then
+    VOICE_ARG=0
+    [ "$VOICE_ENABLED" = true ] && VOICE_ARG=1
+    if "$PROMPT_HELPER" "$RESULT_FILE" "$PROMPT_TEXT" "$HAS_THREAD_ARG" "$CONTINUE_DEFAULT_ARG" "$VOICE_ARG" </dev/null; then
         PROMPT=$(jq -r '.prompt // ""' "$RESULT_FILE" 2>/dev/null || true)
         CONTINUE_FLAG=$(jq -r '.continue // false' "$RESULT_FILE" 2>/dev/null | tr '[:lower:]' '[:upper:]')
         [ "$CONTINUE_FLAG" = "TRUE" ] || CONTINUE_FLAG="FALSE"
@@ -153,6 +156,7 @@ cat > "$STATE_FILE" << EOF
 THREAD_ID="$THREAD_ID"
 LAST_MODE="$MODE"
 CONTINUE_DEFAULT=$CONTINUE_DEFAULT
+VOICE_ENABLED=$VOICE_ENABLED
 EOF
 
 # --- History ---

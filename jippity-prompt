@@ -18,6 +18,7 @@ import tempfile
 
 
 MODEL_PATHS = [
+    "/usr/share/whisper.cpp-model-small.en/ggml-small.en.bin",
     "/usr/share/whisper.cpp/models/ggml-small.en.bin",
     "/usr/share/whisper.cpp/ggml-small.en.bin",
     "/usr/lib/whisper.cpp/models/ggml-small.en.bin",
@@ -146,7 +147,7 @@ def main():
             voice_state["recording"] = False
             voice_state["proc"] = None
             if proc is not None:
-                proc.terminate()
+                proc.send_signal(subprocess.signal.SIGINT)
                 try:
                     proc.wait(timeout=2)
                 except subprocess.TimeoutExpired:

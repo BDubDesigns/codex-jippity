@@ -14,6 +14,7 @@ if [ ! -f "$STATE_FILE" ]; then
 THREAD_ID=""
 LAST_MODE=""
 CONTINUE_DEFAULT=false
+VOICE_ENABLED=false
 EOF
 fi
 
@@ -26,9 +27,15 @@ Jippity directories created:
   State:   $CONFIG_DIR/state
 
 Dependencies:
-  - kdialog, spectacle, jq: already in your KDE install
+  - kdialog, spectacle, jq, parecord: already in your KDE install
   - PyQt6 (optional): enables a combined input + continue-thread checkbox dialog.
     Already installed on KDE Plasma systems. Fall back is a two-step kdialog flow.
+  - Voice input (optional, off by default):
+      Install: paru -S whisper.cpp whisper.cpp-model-small.en
+      Enable:  $SCRIPT_DIR/jippity --voice
+      Use:     hold Alt (or the on-screen "Hold to Talk" button) while the
+               prompt dialog is open. Release to transcribe into the box.
+               Edit the transcription before pressing Enter if needed.
 
 To bind KDE global shortcuts:
 
@@ -63,6 +70,7 @@ Continue-thread flow:
 
 History viewer (Super+H):
   - Lists threads (most recent first) with exchange count and timestamp
+  - Active thread is marked with ▸ prefix, bold, and a status bar at top
   - Click a thread to read the full transcript
   - Search across prompts and responses
   - Multi-select threads (Ctrl-click) and Delete to remove them and their screenshots

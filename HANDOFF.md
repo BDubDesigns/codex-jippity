@@ -36,7 +36,7 @@ Toolbar removed:
 - `codex exec -i <image> -o <file> -- <prompt>` — one-shot non-interactive with image
 - `codex exec resume --last -i <image> -o <file> -- <prompt>` — session continuation (alternative approach, not used)
 - `kdialog --inputbox`, `--textbox`, `--passivepopup` — all dialog types work
-- `jippity-prompt` (PyQt6 helper) — combined input + continue-thread checkbox in one native Qt dialog
+- `jippity-prompt` (PyQt6 helper) — combined input + continue-thread checkbox in one native Qt dialog. Optional hold-to-talk: `parecord` (PipeWire) writes 16kHz mono WAV, `whisper-cli` transcribes on release and inserts at cursor. Off by default; falls back silently if `VOICE_ENABLED=false` or whisper missing.
 - `jippity-history` (PyQt6 helper) — thread list with full transcript, search, multi-select delete (also removes screenshots), and "Set as Active Thread" (writes THREAD_ID + CONTINUE_DEFAULT=true). Tolerates legacy pretty-printed JSONL; migrates to compact JSONL on first delete.
 - Thread reconstruction from `history.jsonl` — match entries by THREAD_ID, format as conversation block, prepend to prompt
 
@@ -77,16 +77,36 @@ Benefits:
 - Resilient to codex updates.
 - No persistent mode toggle — less confusing UX.
 
+## Voice Input (Phase 6 — done)
+
+Hold-to-talk transcription wired into `jippity-prompt`. No new Python deps; uses `parecord` (PipeWire, already installed) for capture and `whisper-cli` (whisper.cpp, AUR) for transcription.
+
+1. **State file** gains `VOICE_ENABLED` (default false). Persisted across runs in `~/.config/jippity/state`.
+2. **`jippity-prompt`** reads voice_enabled (6th CLI arg). When true and `whisper-cli` + model are found, adds a "Hold to Talk" button and installs an app-wide event filter for Alt-hold.
+3. Both the on-screen button (`pressed`/`released`) and Alt (`keyPress`/`keyRelease`, non-autorepeat) call the same `start_recording()` / `stop_and_transcribe()` pair.
+4. `start_recording()` spawns `parecord --rate=16000 --format=s16ne --channels=1 --file-format=wav <tmp>` so whisper.cpp gets a 16 kHz mono WAV directly. Button turns red and shows "● Recording…" while held.
+5. `stop_and_transcribe()` terminates parecord, runs `whisper-cli -m <model> -f <wav> -nt --no-timestamps -l en`, parses stdout, and calls `QLineEdit.insert(transcript + " ")` at the cursor. No auto-submit — user can edit first.
+6. Zero-cost fallback: if `VOICE_ENABLED=false` or whisper missing, the dialog is the plain two-row text+checkbox and no audio stack is touched.
+
+**Model lookup** checks `~/.local/share/jippity/models/ggml-small.en.bin` first, then standard whisper.cpp install paths. Default recommendation is `small.en` (~244 MiB, English-only).
+
+**Install:**
+```
+paru -S whisper.cpp whisper.cpp-model-small.en
+```
+Then run `jippity --voice` to toggle voice on (off by default). A passivepopup confirms the new state. State persists in `~/.config/jippity/state`.
+
+If whisper.cpp latency becomes annoying (model load per utterance, ~1–2 s), swap backend to `python-faster-whisper` (AUR) which keeps the model loaded in-process. The `jippity-prompt` voice block is isolated enough to swap the transcribe function without touching callers.
+
 ## Directly Next
 
 - **Bind KDE global shortcuts.** Super+S → `jippity --mode region`, etc. See `jippity-setup` output. Super+H → `jippity --history`.
 - **No standalone tray phase.** Tray app folded into Phase 7 (rich GUI).
 
-## Longer-Term Vision (Phase 6–7)
+## Longer-Term Vision (Phase 7)
 
 | Phase | Feature |
 |-------|---------|
-| 6 | Voice input (off by default, toggleable) |
 | 7 | Rich GUI with system tray — Tauri, Qt, or GTK frontend wrapping the proven core. Tray adds at-a-glance status (active thread, last mode, response arrival) without changing invocation: hotkeys remain primary. |
 
 ## Repo

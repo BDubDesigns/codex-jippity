@@ -1,35 +1,90 @@
 #!/usr/bin/env python3
 """Jippity prompt dialog: prompt input + continue-thread checkbox in one window.
 
-Usage: jippity-prompt <result_file> <label_text> <has_thread> <initial_check>
+Usage: jippity-prompt <result_file> <label_text> <has_thread> <initial_check> <voice_enabled>
 Writes JSON {prompt, continue} to result_file on OK (exit 0).
 Exits 1 on cancel/close without writing.
+
+When voice_enabled is "1", shows a "Hold to Talk" button and listens for
+Alt-hold to start audio capture. On release, transcribes via whisper.cpp
+and inserts the result at the cursor position (no auto-submit — user can
+edit before pressing Enter).
 """
 import json
+import os
+import subprocess
 import sys
+import tempfile
+
+
+MODEL_PATHS = [
+    "/usr/share/whisper.cpp-model-small.en/ggml-small.en.bin",
+    "/usr/share/whisper.cpp/models/ggml-small.en.bin",
+    "/usr/share/whisper.cpp/ggml-small.en.bin",
+    "/usr/lib/whisper.cpp/models/ggml-small.en.bin",
+    os.path.expanduser("~/.local/share/whisper.cpp/ggml-small.en.bin"),
+    os.path.expanduser("~/.local/share/jippity/models/ggml-small.en.bin"),
+]
+WHISPER_BINARIES = ["whisper-cli", "whisper"]
+TMPDIR = os.environ.get("TMPDIR", "/tmp") + "/jippity"
+
+
+def find_whisper():
+    for b in WHISPER_BINARIES:
+        for path in ["/usr/bin/" + b, "/usr/local/bin/" + b]:
+            if os.path.exists(path):
+                return path
+    for b in WHISPER_BINARIES:
+        from shutil import which
+        p = which(b)
+        if p:
+            return p
+    return None
+
+
+def find_model():
+    for p in MODEL_PATHS:
+        if os.path.exists(p):
+            return p
+    return None
+
 
 def main():
-    if len(sys.argv) < 5:
-        sys.stderr.write("usage: jippity-prompt <result_file> <label_text> <has_thread> <initial_check>\n")
+    if len(sys.argv) < 6:
+        sys.stderr.write("usage: jippity-prompt <result_file> <label_text> "
+                          "<has_thread> <initial_check> <voice_enabled>\n")
         sys.exit(2)
 
     result_file = sys.argv[1]
     label_text = sys.argv[2]
     has_thread = sys.argv[3] == "1"
     initial_check = sys.argv[4] == "1"
+    voice_enabled = sys.argv[5] == "1"
 
     try:
         from PyQt6.QtWidgets import (
-            QApplication, QDialog, QVBoxLayout, QLabel,
-            QLineEdit, QCheckBox, QDialogButtonBox,
+            QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+            QLineEdit, QCheckBox, QDialogButtonBox, QPushButton,
         )
-        from PyQt6.QtCore import Qt
+        from PyQt6.QtCore import Qt, QEvent, QObject
     except ImportError:
         sys.stderr.write("PyQt6 not available\n")
         sys.exit(3)
 
     app = QApplication(sys.argv)
     app.setApplicationName("Jippity")
+
+    # Voice readiness check
+    whisper_bin = find_whisper()
+    model_file = find_model()
+    voice_ready = voice_enabled and whisper_bin is not None and model_file is not None
+    if voice_enabled and not voice_ready:
+        sys.stderr.write(
+            f"jippity-prompt: voice enabled but "
+            f"{'whisper-cli' if not whisper_bin else 'model'} not found\n"
+        )
+
+    os.makedirs(TMPDIR, exist_ok=True)
 
     dlg = QDialog()
     dlg.setWindowTitle("Jippity")
@@ -41,7 +96,7 @@ def main():
     layout.addWidget(label)
 
     edit = QLineEdit()
-    edit.setPlaceholderText("Type your question and press Enter...")
+    edit.setPlaceholderText("Type your question and press Enter…")
     edit.setMinimumWidth(420)
     layout.addWidget(edit)
 
@@ -49,6 +104,111 @@ def main():
     chk.setChecked(initial_check if has_thread else False)
     chk.setEnabled(has_thread)
     layout.addWidget(chk)
+
+    voice_state = {"proc": None, "wav": None, "recording": False}
+
+    if voice_ready:
+        voice_row = QHBoxLayout()
+        voice_btn = QPushButton("🎙  Hold to Talk")
+        voice_btn.setToolTip("Hold this button (or hold Alt) to record. "
+                              "Release to transcribe into the box below.")
+        voice_hint = QLabel("(or hold Alt)")
+        voice_hint.setStyleSheet("color: gray;")
+        voice_row.addWidget(voice_btn)
+        voice_row.addWidget(voice_hint)
+        voice_row.addStretch(1)
+        layout.addLayout(voice_row)
+
+        def start_recording():
+            if voice_state["recording"]:
+                return
+            wav = tempfile.NamedTemporaryFile(
+                prefix="voice_", suffix=".wav", dir=TMPDIR, delete=False
+            )
+            wav.close()
+            voice_state["wav"] = wav.name
+            try:
+                voice_state["proc"] = subprocess.Popen([
+                    "parecord", "--rate=16000", "--format=s16ne",
+                    "--channels=1", "--file-format=wav", wav.name,
+                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except FileNotFoundError:
+                sys.stderr.write("parecord not found (need pipewire-pulse)\n")
+                voice_state["proc"] = None
+                return
+            voice_state["recording"] = True
+            voice_btn.setText("●  Recording…")
+            voice_btn.setStyleSheet("background-color: #ff4444; color: white;")
+
+        def stop_and_transcribe():
+            if not voice_state["recording"]:
+                return
+            proc = voice_state["proc"]
+            wav = voice_state["wav"]
+            voice_state["recording"] = False
+            voice_state["proc"] = None
+            voice_state["wav"] = None
+            # Reset button immediately so the UI reflects release-before-work
+            voice_btn.setText("🎙  Hold to Talk")
+            voice_btn.setStyleSheet("")
+            voice_btn.setEnabled(False)
+            voice_btn.setText("Transcribing…")
+            # Force the UI to repaint before the blocking transcribe
+            app.processEvents()
+            if proc is not None:
+                proc.send_signal(subprocess.signal.SIGINT)
+                try:
+                    proc.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+            if not wav or not os.path.exists(wav):
+                voice_btn.setEnabled(True)
+                voice_btn.setText("🎙  Hold to Talk")
+                return
+            try:
+                result = subprocess.run(
+                    [whisper_bin, "-m", model_file, "-f", wav,
+                     "-nt", "--no-timestamps", "-l", "en"],
+                    capture_output=True, text=True, timeout=30,
+                )
+            except subprocess.TimeoutExpired:
+                sys.stderr.write("whisper timed out\n")
+                voice_btn.setEnabled(True)
+                voice_btn.setText("🎙  Hold to Talk")
+                return
+            finally:
+                try:
+                    os.remove(wav)
+                except OSError:
+                    pass
+            voice_btn.setEnabled(True)
+            voice_btn.setText("🎙  Hold to Talk")
+            if result.returncode != 0:
+                sys.stderr.write(f"whisper failed: {result.stderr}\n")
+                return
+            transcript = result.stdout.strip()
+            if not transcript:
+                return
+            edit.insert(transcript + " ")
+            edit.setFocus()
+
+        voice_btn.pressed.connect(start_recording)
+        voice_btn.released.connect(stop_and_transcribe)
+
+        class AltFilter(QObject):
+            def eventFilter(self, obj, event):
+                if event.type() == QEvent.Type.KeyPress:
+                    if event.key() == Qt.Key.Key_Alt and not event.isAutoRepeat():
+                        start_recording()
+                        return True
+                elif event.type() == QEvent.Type.KeyRelease:
+                    if event.key() == Qt.Key.Key_Alt and not event.isAutoRepeat():
+                        stop_and_transcribe()
+                        return True
+                return False
+
+        alt_filter = AltFilter()
+        app.installEventFilter(alt_filter)
 
     buttons = QDialogButtonBox(
         QDialogButtonBox.StandardButton.Ok |

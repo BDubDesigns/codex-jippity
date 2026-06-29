@@ -4,27 +4,24 @@ set -euo pipefail
 usage() {
     echo "Usage: jippity --mode <region|screen|window|quick>"
     echo "       jippity --history"
+    echo "       jippity --voice"
     exit 1
 }
 
 MODE=""
 DO_HISTORY=false
+DO_VOICE=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --mode) MODE="$2"; shift 2 ;;
         --history) DO_HISTORY=true; shift ;;
+        --voice) DO_VOICE=true; shift ;;
         --help|-h) usage ;;
         *) usage ;;
     esac
 done
 
-# --- Handle --history (delegate to standalone PyQt6 viewer) ---
-if [ "$DO_HISTORY" = true ]; then
-    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-    exec "$SCRIPT_DIR/jippity-history"
-fi
-
-# --- Paths ---
+# --- Paths (needed for state toggle before history) ---
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/jippity"
 HISTORY_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/jippity"
 TMPDIR="${TMPDIR:-/tmp}/jippity"
@@ -36,7 +33,33 @@ HISTORY_FILE="$HISTORY_DIR/history.jsonl"
 THREAD_ID=""
 LAST_MODE=""
 CONTINUE_DEFAULT=false
+VOICE_ENABLED=false
 [ -f "$STATE_FILE" ] && source "$STATE_FILE"
+
+# --- Handle --history (delegate to standalone PyQt6 viewer) ---
+if [ "$DO_HISTORY" = true ]; then
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    exec "$SCRIPT_DIR/jippity-history"
+fi
+
+# --- Handle --voice (toggle voice on/off, persist, exit) ---
+if [ "$DO_VOICE" = true ]; then
+    if [ "$VOICE_ENABLED" = true ]; then
+        VOICE_ENABLED=false
+        MSG="Jippity: voice OFF"
+    else
+        VOICE_ENABLED=true
+        MSG="Jippity: voice ON"
+    fi
+    cat > "$STATE_FILE" << EOF
+THREAD_ID="$THREAD_ID"
+LAST_MODE="$LAST_MODE"
+CONTINUE_DEFAULT=$CONTINUE_DEFAULT
+VOICE_ENABLED=$VOICE_ENABLED
+EOF
+    kdialog --passivepopup "$MSG" 3 2>/dev/null || echo "$MSG"
+    exit 0
+fi
 
 # --- Validate mode ---
 case "$MODE" in
@@ -75,7 +98,9 @@ if python3 -c "import PyQt6" 2>/dev/null && [ -x "$PROMPT_HELPER" ]; then
     $HAS_THREAD && HAS_THREAD_ARG=1
     CONTINUE_DEFAULT_ARG=0
     [ "$CONTINUE_DEFAULT" = true ] && CONTINUE_DEFAULT_ARG=1
-    if "$PROMPT_HELPER" "$RESULT_FILE" "$PROMPT_TEXT" "$HAS_THREAD_ARG" "$CONTINUE_DEFAULT_ARG" </dev/null; then
+    VOICE_ARG=0
+    [ "$VOICE_ENABLED" = true ] && VOICE_ARG=1
+    if "$PROMPT_HELPER" "$RESULT_FILE" "$PROMPT_TEXT" "$HAS_THREAD_ARG" "$CONTINUE_DEFAULT_ARG" "$VOICE_ARG" </dev/null; then
         PROMPT=$(jq -r '.prompt // ""' "$RESULT_FILE" 2>/dev/null || true)
         CONTINUE_FLAG=$(jq -r '.continue // false' "$RESULT_FILE" 2>/dev/null | tr '[:lower:]' '[:upper:]')
         [ "$CONTINUE_FLAG" = "TRUE" ] || CONTINUE_FLAG="FALSE"
@@ -153,6 +178,7 @@ cat > "$STATE_FILE" << EOF
 THREAD_ID="$THREAD_ID"
 LAST_MODE="$MODE"
 CONTINUE_DEFAULT=$CONTINUE_DEFAULT
+VOICE_ENABLED=$VOICE_ENABLED
 EOF
 
 # --- History ---

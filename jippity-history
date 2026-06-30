@@ -384,9 +384,16 @@ def main():
         )
         try:
             result = subprocess.run(
-                [tools_helper], capture_output=True, text=True, timeout=5,
+                [tools_helper, "--json"], capture_output=True, text=True, timeout=5,
             )
-            text = result.stdout.strip() or "No jippity tools defined."
+            tools = json.loads(result.stdout) if result.stdout.strip() else []
+            if not tools:
+                text = "No jippity tools defined."
+            else:
+                lines = [f"Jippity tools ({len(tools)}):"]
+                for t in tools:
+                    lines.append(f"  • {t['name']} — {t['description']}")
+                text = "\n".join(lines)
         except Exception as e:
             text = f"Failed to load tools: {e}"
         QMessageBox.information(win, "Jippity Tools", text)

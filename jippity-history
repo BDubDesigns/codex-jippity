@@ -8,6 +8,7 @@ State file may be updated (THREAD_ID, CONTINUE_DEFAULT) when user clicks
 """
 import json
 import os
+import subprocess
 import sys
 from collections import OrderedDict
 from datetime import datetime
@@ -252,9 +253,11 @@ def main():
     btn_set_active.setEnabled(False)
     btn_delete = QPushButton("Delete Selected")
     btn_delete.setEnabled(False)
+    btn_tools = QPushButton("Tools…")
     btn_close = QPushButton("Close")
     btn_row.addWidget(btn_set_active)
     btn_row.addWidget(btn_delete)
+    btn_row.addWidget(btn_tools)
     btn_row.addStretch(1)
     btn_row.addWidget(btn_close)
     outer.addLayout(btn_row)
@@ -375,11 +378,25 @@ def main():
         status.setText(f"{len(threads)} thread(s) · removed {removed} entries, "
                        f"{len(files)} screenshot(s)")
 
+    def on_tools():
+        tools_helper = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "jippity-tools"
+        )
+        try:
+            result = subprocess.run(
+                [tools_helper], capture_output=True, text=True, timeout=5,
+            )
+            text = result.stdout.strip() or "No jippity tools defined."
+        except Exception as e:
+            text = f"Failed to load tools: {e}"
+        QMessageBox.information(win, "Jippity Tools", text)
+
     search.textChanged.connect(populate)
     list_widget.itemSelectionChanged.connect(on_selection_changed)
     list_widget.itemClicked.connect(on_selection_changed)
     btn_set_active.clicked.connect(on_set_active)
     btn_delete.clicked.connect(on_delete)
+    btn_tools.clicked.connect(on_tools)
     btn_close.clicked.connect(win.close)
 
     win.show()

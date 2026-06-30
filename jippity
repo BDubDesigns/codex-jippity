@@ -147,6 +147,15 @@ if $SHOULD_CONTINUE; then
 fi
 [ -z "$CONTEXT" ] && CONTEXT="$PROMPT"
 
+# --- Prepend jippity tools index (if any tools are defined) ---
+TOOLS_HELPER="$SCRIPT_DIR/jippity-tools"
+if [ -x "$TOOLS_HELPER" ]; then
+    TOOLS_BLOCK=$("$TOOLS_HELPER" 2>/dev/null || true)
+    if [ -n "$TOOLS_BLOCK" ]; then
+        CONTEXT="$TOOLS_BLOCK"$'\n\n'"$CONTEXT"
+    fi
+fi
+
 # --- Generate or reuse thread ID ---
 if ! $SHOULD_CONTINUE; then
     THREAD_ID=$(cat /proc/sys/kernel/random/uuid)

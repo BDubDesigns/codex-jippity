@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+"""Scan jippity's tools/ directory and emit either a JSON description
+or a plain-text index block to prepend to codex prompts.
+
+Tool file format (front-matter as comments):
+    # @tool <name>
+    # @description <one-line>
+    # @usage <usage line>            (repeatable)
+    # @example <example command>     (optional, repeatable)
+    # @installed-by <external|jippity> [<notes>]
+
+Usage:
+    jippity-tools                  # print tools index block to stdout
+    jippity-tools --json           # print JSON array to stdout
+    jippity-tools --list           # print one tool name per line
+
+Empty/comment-only files # not starting with @tool are skipped.
+Nonexistent tools/ dir → empty output, exit 0.
+"""
+import json
+import os
+import sys
+
+
+def tools_dir():
+    here = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(here, "tools")
+
+
+def parse_tool(path):
+    tool = {
+        "name": "",
+        "description": "",
+        "usage": [],
+        "example": [],
+        "installed_by": "",
+    }
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            s = line.strip()
+            if not s.startswith("#"):
+                break
+            body = s.lstrip("# ").rstrip()
+            if body.startswith("@tool "):
+                tool["name"] = body[len("@tool "):].strip()
+            elif body.startswith("@description "):
+                tool["description"] = body[len("@description "):].strip()
+            elif body.startswith("@usage "):
+                tool["usage"].append(body[len("@usage "):].strip())
+            elif body.startswith("@example "):
+                tool["example"].append(body[len("@example "):].strip())
+            elif body.startswith("@installed-by "):
+                tool["installed_by"] = body[len("@installed-by "):].strip()
+    return tool if tool["name"] else None
+
+
+def load_tools():
+    d = tools_dir()
+    if not os.path.isdir(d):
+        return []
+    tools = []
+    for name in sorted(os.listdir(d)):
+        path = os.path.join(d, name)
+        if not os.path.isfile(path) or name.startswith("."):
+            continue
+        t = parse_tool(path)
+        if t:
+            tools.append(t)
+    return tools
+
+
+def index_block(tools):
+    if not tools:
+        return ""
+    lines = ["[Available jippity tools]"]
+    lines.append("You can invoke these via the shell. Use sparingly and only "
+                 "when the user asks or when they clearly help answer.")
+    for t in tools:
+        lines.append(f"- {t['name']}: {t['description']}")
+        for u in t["usage"]:
+            lines.append(f"    usage: {u}")
+        for ex in t["example"]:
+            lines.append(f"    example: {ex}")
+        if t["installed_by"]:
+            lines.append(f"    installed-by: {t['installed_by']}")
+    return "\n".join(lines)
+
+
+def main():
+    fmt = "block"
+    if "--json" in sys.argv:
+        fmt = "json"
+    elif "--list" in sys.argv:
+        fmt = "list"
+    tools = load_tools()
+    if fmt == "json":
+        print(json.dumps(tools, ensure_ascii=False, indent=2))
+    elif fmt == "list":
+        for t in tools:
+            print(t["name"])
+    else:
+        out = index_block(tools)
+        if out:
+            print(out)
+
+
+if __name__ == "__main__":
+    main()

@@ -6,7 +6,7 @@ A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex
 
 ## Current state
 
-**Phases 0–4.6 + voice input (Phase 6) implemented, voice install pending.** Code exists, tested on this machine.
+**Phases 0–4.6 + voice input (Phase 6) + tools implemented.** Code exists, tested on this machine.
 
 | Script | Purpose |
 |--------|---------|
@@ -18,6 +18,7 @@ A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex
 | `jippity-prompt` | PyQt6 helper: prompt input + continue-thread checkbox dialog + (optional) hold-to-talk voice |
 | `jippity-history` | PyQt6 helper: browse/search/delete threads, set active thread |
 | `jippity-setup` | Create dirs, print KDE hotkey instructions |
+| `jippity-tools` | Scan `tools/` dir, emit tools index block for codex context or JSON for viewers |
 
 ## Key design facts
 
@@ -40,7 +41,7 @@ A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex
 - **Dynamic dialog sizing** — `fold -w 80` for visual line estimate, `height = lines × 22px + 100px`, clamped 120–800px.
 - **Spectacle noise suppressed** — stderr to `/dev/null`.
 - **Notification** — `kdialog --passivepopup` after each response.
-- **No streaming** — blocks for full response.
+- **Tools** — a `tools/` subdirectory in the repo holds tool manifests (small files with `# @tool` front-matter). `jippity-tools` scans this dir and prepends an `[Available jippity tools]` index block to the context sent to codex. Codex can then invoke the tools via its shell. The history viewer's "Tools…" button shows the same index. External tools already in `$PATH` (like `codex-reset`) are documented via stub manifests; bundled tools are real executable scripts placed in `tools/`.
 
 ## Development roadmap
 
@@ -56,6 +57,29 @@ A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex
 | 5 | *(folded into Phase 7)* | — |
 | 6 | Voice input | Done |
 | 7 | Rich GUI + tray (Tauri/Qt/GTK/Electron) | Future |
+
+## Tools
+
+A `tools/` subdirectory in the repo holds tool manifests — small files with `# @tool` front-matter describing a tool codex can invoke.
+
+| Tool | Status |
+|------|--------|
+| `codex-reset` | Stub manifest (external — already in `$PATH` on this machine) |
+
+Tool file format:
+
+```
+# @tool <name>
+# @description <one-line>
+# @usage <usage line>            (repeatable)
+# @example <example command>     (optional, repeatable)
+# @installed-by <external|jippity> [<notes>]
+```
+
+`jippity-tools` scans `tools/`, parses the front-matter, and emits either:
+- A plain-text `[Available jippity tools]` index block (default) — prepended to codex context
+- `--json` — structured JSON list (for the history viewer's "Tools…" button)
+- `--list` — one tool name per line
 
 ## Hotkeys (not yet bound)
 

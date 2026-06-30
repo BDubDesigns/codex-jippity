@@ -1,0 +1,6 @@
+# @tool codex-reset
+# @description Shows when your next codex rate-limit reset happens and when it expires
+# @usage codex-reset            Show the most recent unused reset
+# @usage codex-reset --all      Show all resets
+# @example codex-reset --all
+# @installed-by external (in $PATH at /home/brandon/.local/bin/codex-reset)

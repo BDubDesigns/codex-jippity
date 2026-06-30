@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """Jippity prompt dialog: prompt input + continue-thread checkbox in one window.
 
-Usage: jippity-prompt <result_file> <label_text> <has_thread> <initial_check> <voice_enabled>
-Writes JSON {prompt, continue} to result_file on OK (exit 0).
+Usage: jippity-prompt <result_file> <label_text> <has_thread> <initial_check> <voice_enabled> <has_tools>
+Writes JSON {prompt, continue, bypass_sandbox} to result_file on OK (exit 0).
 Exits 1 on cancel/close without writing.
 
 When voice_enabled is "1", shows a "Hold to Talk" button and listens for
 Alt-hold to start audio capture. On release, transcribes via whisper.cpp
 and inserts the result at the cursor position (no auto-submit — user can
 edit before pressing Enter).
+
+When has_tools is "1", shows an "Allow network access (disable sandbox)"
+checkbox. Always defaults to off — user must explicitly opt in per prompt.
 """
 import json
 import os
@@ -50,9 +53,9 @@ def find_model():
 
 
 def main():
-    if len(sys.argv) < 6:
+    if len(sys.argv) < 7:
         sys.stderr.write("usage: jippity-prompt <result_file> <label_text> "
-                          "<has_thread> <initial_check> <voice_enabled>\n")
+                          "<has_thread> <initial_check> <voice_enabled> <has_tools>\n")
         sys.exit(2)
 
     result_file = sys.argv[1]
@@ -60,6 +63,7 @@ def main():
     has_thread = sys.argv[3] == "1"
     initial_check = sys.argv[4] == "1"
     voice_enabled = sys.argv[5] == "1"
+    has_tools = sys.argv[6] == "1"
 
     try:
         from PyQt6.QtWidgets import (
@@ -104,6 +108,16 @@ def main():
     chk.setChecked(initial_check if has_thread else False)
     chk.setEnabled(has_thread)
     layout.addWidget(chk)
+
+    bypass_chk = QCheckBox("Allow network access (disable sandbox)")
+    bypass_chk.setChecked(False)
+    bypass_chk.setEnabled(has_tools)
+    bypass_chk.setToolTip(
+        "When checked, codex runs without its sandbox so model-invoked "
+        "shell commands (like codex-reset) can reach the network. Off by "
+        "default each run — you must opt in per prompt."
+    )
+    layout.addWidget(bypass_chk)
 
     voice_state = {"proc": None, "wav": None, "recording": False}
 
@@ -224,7 +238,11 @@ def main():
 
     if dlg.exec() == QDialog.DialogCode.Accepted:
         with open(result_file, "w") as f:
-            json.dump({"prompt": edit.text(), "continue": chk.isChecked()}, f)
+            json.dump({
+                "prompt": edit.text(),
+                "continue": chk.isChecked(),
+                "bypass_sandbox": bypass_chk.isChecked(),
+            }, f)
         sys.exit(0)
     else:
         sys.exit(1)

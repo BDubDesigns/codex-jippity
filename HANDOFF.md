@@ -15,6 +15,7 @@ Additional commands:
 - `jippity-setup` — creates directories, prints KDE hotkey binding instructions
 - `jippity-prompt` — PyQt6 helper for the prompt dialog (input + continue-thread checkbox)
 - `jippity-history` — PyQt6 helper for the history viewer (`jippity --history`)
+- `jippity-tools` — scans `tools/` dir, emits a `[Available jippity tools]` index block for the codex context (or `--json` / `--list` for introspection)
 
 Toolbar removed:
 - `jippity-toggle` / `jippity-reset` — deleted. The continue-thread checkbox replaced toggle; reset is no longer a separate script.
@@ -29,6 +30,7 @@ Toolbar removed:
 - **Spectacle noise suppressed.** Stderr redirected to `/dev/null` to hide Tesseract library warnings.
 - **Notification popup.** `kdialog --passivepopup "Jippity response ready" 3` after each completion.
 - **No streaming.** Blocks for full response. Streaming possible later.
+- **Tools.** A `tools/` subdirectory in the repo holds tool manifests — small files with `# @tool` front-matter (`@tool`, `@description`, `@usage`, `@example`, `@installed-by`). `jippity-tools` scans the dir and prepends an `[Available jippity tools]` index block to the context sent to codex; the history viewer's "Tools…" button shows the same index via `jippity-tools --json`. External tools already in `$PATH` (like `codex-reset`) are documented via stub manifests; bundled tools are real executable scripts placed in `tools/`.
 
 ### What was validated
 

@@ -92,6 +92,7 @@ PROMPT_HELPER="$SCRIPT_DIR/jippity-prompt"
 PROMPT=""
 CONTINUE_FLAG="FALSE"
 BYPASS_SANDBOX=false
+HAS_TOOLS=false
 
 if python3 -c "import PyQt6" 2>/dev/null && [ -x "$PROMPT_HELPER" ]; then
     RESULT_FILE=$(mktemp "$TMPDIR/prompt.XXXXXX.json")
@@ -161,7 +162,6 @@ fi
 
 # --- Prepend jippity tools index (if any tools are defined) ---
 TOOLS_HELPER="$SCRIPT_DIR/jippity-tools"
-HAS_TOOLS=false
 if [ -x "$TOOLS_HELPER" ]; then
     TOOLS_BLOCK=$("$TOOLS_HELPER" 2>/dev/null || true)
     if [ -n "$TOOLS_BLOCK" ]; then

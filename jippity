@@ -91,6 +91,7 @@ PROMPT_HELPER="$SCRIPT_DIR/jippity-prompt"
 
 PROMPT=""
 CONTINUE_FLAG="FALSE"
+BYPASS_SANDBOX=false
 
 if python3 -c "import PyQt6" 2>/dev/null && [ -x "$PROMPT_HELPER" ]; then
     RESULT_FILE=$(mktemp "$TMPDIR/prompt.XXXXXX.json")
@@ -100,11 +101,19 @@ if python3 -c "import PyQt6" 2>/dev/null && [ -x "$PROMPT_HELPER" ]; then
     [ "$CONTINUE_DEFAULT" = true ] && CONTINUE_DEFAULT_ARG=1
     VOICE_ARG=0
     [ "$VOICE_ENABLED" = true ] && VOICE_ARG=1
-    if "$PROMPT_HELPER" "$RESULT_FILE" "$PROMPT_TEXT" "$HAS_THREAD_ARG" "$CONTINUE_DEFAULT_ARG" "$VOICE_ARG" </dev/null; then
+    HAS_TOOLS_ARG=0
+    # HAS_TOOLS may have been pre-set by the tools block; otherwise check via helper
+    if [ "$HAS_TOOLS" != true ] && [ -x "$SCRIPT_DIR/jippity-tools" ]; then
+        "$SCRIPT_DIR/jippity-tools" --list 2>/dev/null | grep -q . && HAS_TOOLS=true
+    fi
+    $HAS_TOOLS && HAS_TOOLS_ARG=1
+    if "$PROMPT_HELPER" "$RESULT_FILE" "$PROMPT_TEXT" "$HAS_THREAD_ARG" "$CONTINUE_DEFAULT_ARG" "$VOICE_ARG" "$HAS_TOOLS_ARG" </dev/null; then
         PROMPT=$(jq -r '.prompt // ""' "$RESULT_FILE" 2>/dev/null || true)
         CONTINUE_FLAG=$(jq -r '.continue // false' "$RESULT_FILE" 2>/dev/null | tr '[:lower:]' '[:upper:]')
         [ "$CONTINUE_FLAG" = "TRUE" ] || CONTINUE_FLAG="FALSE"
         [ "$CONTINUE_FLAG" = "TRUE" ] && CONTINUE_DEFAULT=true || CONTINUE_DEFAULT=false
+        BYPASS_SANDBOX=$(jq -r '.bypass_sandbox // false' "$RESULT_FILE" 2>/dev/null | tr '[:lower:]' '[:upper:]')
+        [ "$BYPASS_SANDBOX" = "TRUE" ] && BYPASS_SANDBOX=true || BYPASS_SANDBOX=false
     fi
     rm -f "$RESULT_FILE"
 else
@@ -119,6 +128,9 @@ else
         CONTINUE_DEFAULT=true
     else
         CONTINUE_DEFAULT=false
+    fi
+    if $HAS_TOOLS && kdialog --default no --yesno "Allow network access (disable sandbox) for this prompt?"; then
+        BYPASS_SANDBOX=true
     fi
 fi
 
@@ -149,10 +161,12 @@ fi
 
 # --- Prepend jippity tools index (if any tools are defined) ---
 TOOLS_HELPER="$SCRIPT_DIR/jippity-tools"
+HAS_TOOLS=false
 if [ -x "$TOOLS_HELPER" ]; then
     TOOLS_BLOCK=$("$TOOLS_HELPER" 2>/dev/null || true)
     if [ -n "$TOOLS_BLOCK" ]; then
         CONTEXT="$TOOLS_BLOCK"$'\n\n'"$CONTEXT"
+        HAS_TOOLS=true
     fi
 fi
 
@@ -166,6 +180,11 @@ OUTFILE="$HISTORY_DIR/responses/${MODE}_$STAMP.txt"
 LOGFILE="$HISTORY_DIR/logs/${MODE}_$STAMP.log"
 
 CODEX_BASE=(codex exec --ephemeral --skip-git-repo-check)
+
+# Apply sandbox bypass if user opted in (per-prompt, never sticky)
+if [ "$BYPASS_SANDBOX" = true ]; then
+    CODEX_BASE+=(-s danger-full-access)
+fi
 
 if [ -n "$SCREENSHOT" ]; then
     if ! "${CODEX_BASE[@]}" -i "$SCREENSHOT" -o "$OUTFILE" -- "$CONTEXT" > "$LOGFILE" 2>&1; then

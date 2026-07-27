@@ -18,17 +18,9 @@ import os
 import subprocess
 import sys
 import tempfile
+from jippity_common import WHISPER_BINARIES, find_model
 
 
-MODEL_PATHS = [
-    "/usr/share/whisper.cpp-model-small.en/ggml-small.en.bin",
-    "/usr/share/whisper.cpp/models/ggml-small.en.bin",
-    "/usr/share/whisper.cpp/ggml-small.en.bin",
-    "/usr/lib/whisper.cpp/models/ggml-small.en.bin",
-    os.path.expanduser("~/.local/share/whisper.cpp/ggml-small.en.bin"),
-    os.path.expanduser("~/.local/share/jippity/models/ggml-small.en.bin"),
-]
-WHISPER_BINARIES = ["whisper-cli", "whisper"]
 TMPDIR = os.environ.get("TMPDIR", "/tmp") + "/jippity"
 
 
@@ -41,13 +33,6 @@ def find_whisper():
         from shutil import which
         p = which(b)
         if p:
-            return p
-    return None
-
-
-def find_model():
-    for p in MODEL_PATHS:
-        if os.path.exists(p):
             return p
     return None
 

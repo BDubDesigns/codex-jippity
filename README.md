@@ -82,7 +82,18 @@ Bind them in KDE System Settings > Shortcuts > Custom Shortcuts.
 
 ## Status and roadmap
 
-Core screenshot and text prompt flows work, as do local thread continuation and searchable history. Voice input is implemented. A richer GUI and tray are future work, not a requirement for using the current application. [Jippity Doctor is tracked separately in Issue #8](https://github.com/BDubDesigns/codex-jippity/issues/8).
+Core screenshot and text prompt flows work, as do local thread continuation and searchable history. Voice input is implemented. A richer GUI and tray are future work, not a requirement for using the current application.
+
+## Jippity Doctor
+
+Run the bundled diagnostic directly from any directory:
+
+```bash
+/path/to/codex-jippity/jippity-doctor
+/path/to/codex-jippity/jippity-doctor --json
+```
+
+It checks the platform, required and recommended dependencies, optional voice support, bundled scripts, and active tool manifests. `--json` emits only the simple `jippity-doctor/v1` report with an overall result and stable check IDs. It is local and read-only: it does not access the network, run Codex, read history contents, change configuration, or repair anything. It exits `0` when required checks pass (warnings are allowed), `1` for required runtime failures, and `2` for invalid usage.
 
 ## Custom tools
 
@@ -95,12 +106,19 @@ Documentation-only manifest format:
 ```text
 # @tool example-command
 # @description Brief description of what the command does
+# @command example-command
 # @usage example-command [options]
 # @example example-command --help
 # @installed-by external (must be installed separately and available in $PATH)
 ```
 
-Jippity Doctor will provide a bundled diagnostic command and an optional example manifest in [Issue #8](https://github.com/BDubDesigns/codex-jippity/issues/8).
+`@command` is optional for compatibility with existing manifests. It is the command Codex should invoke; without it, the tool name remains the command. The bundled doctor command ships with Jippity, but its teaching manifest is inactive by default. To let Codex use it, explicitly activate the example:
+
+```bash
+cp examples/tools/jippity-doctor tools/jippity-doctor
+```
+
+This copies only metadata and does not install a command. The doctor needs neither network access nor sandbox bypass.
 
 ## Privacy and security
 
@@ -125,6 +143,7 @@ Jippity Doctor will provide a bundled diagnostic command and an optional example
 | `jippity-history` | PyQt6 history viewer |
 | `jippity-setup` | Creates directories and prints shortcut instructions |
 | `jippity-tools` | Reads active tool manifests from `tools/` |
+| `jippity-doctor` | Read-only local installation diagnostics (`--json` available) |
 
 ## License
 

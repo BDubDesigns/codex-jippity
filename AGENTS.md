@@ -19,6 +19,7 @@ A Linux-only KDE Plasma/Wayland hotkey frontend for [Codex CLI](https://github.c
 | `jippity-history` | PyQt6 helper: browse/search/delete threads, set active thread |
 | `jippity-setup` | Create dirs, print KDE hotkey instructions |
 | `jippity-tools` | Scan `tools/` dir, emit tools index block for codex context or JSON for viewers |
+| `jippity-doctor` | Read-only local diagnostics for dependencies, platform, state, and active manifests |
 
 ## Key design facts
 
@@ -42,6 +43,7 @@ A Linux-only KDE Plasma/Wayland hotkey frontend for [Codex CLI](https://github.c
 - **Spectacle noise suppressed** — stderr to `/dev/null`.
 - **Notification** — `kdialog --passivepopup` after each response.
 - **Tools** — active manifests in `tools/` (small files with `# @tool` front-matter) are scanned by `jippity-tools` and prepended as an index block to Codex context. A manifest does not install its command; external commands must be in `$PATH`. Active tools expose a per-prompt, default-off unsandboxed execution option.
+- **Doctor** — `jippity-doctor` is a standard-library, local, read-only command. It does not read history contents, mutate Jippity files, access the network, or invoke Codex. It returns 0 for required-check success, 1 for required failures, and 2 for usage errors.
 
 ## Development roadmap
 
@@ -67,6 +69,7 @@ Tool file format:
 ```
 # @tool <name>
 # @description <one-line>
+# @command <invocation>           (optional; defaults to tool name)
 # @usage <usage line>            (repeatable)
 # @example <example command>     (optional, repeatable)
 # @installed-by <external|jippity> [<notes>]
@@ -76,6 +79,8 @@ Tool file format:
 - A plain-text `[Available jippity tools]` index block (default) — prepended to codex context
 - `--json` — structured JSON list (for the history viewer's "Tools…" button)
 - `--list` — one tool name per line
+
+Activate the bundled doctor teaching manifest only on request: `cp examples/tools/jippity-doctor tools/jippity-doctor`. Its resolved bundled command works outside the repository working directory and needs no network or sandbox bypass.
 
 ## Hotkeys (not yet bound)
 

@@ -1,0 +1,10 @@
+# @tool jippity-doctor
+# @description Diagnose Jippity's local installation, dependencies, desktop support, voice support, and active manifests.
+# @command jippity-doctor
+# @usage jippity-doctor
+# @usage jippity-doctor --json
+# @example Why is Jippity voice input not working? Run Jippity Doctor if useful.
+# @example Check whether this computer is ready to run Jippity and explain anything I need to fix.
+# @installed-by jippity (bundled read-only diagnostic; no network or sandbox bypass needed)
+# Run the default report for ordinary troubleshooting; prefer --json for structured inspection.
+# Summarize failures and recommended fixes instead of dumping raw JSON. It diagnoses only and never repairs the system.

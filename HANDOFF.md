@@ -14,8 +14,9 @@ Shared core via `jippity --mode <region|screen|window|quick>` with four thin wra
 Additional commands:
 - `jippity-setup` — creates directories, prints KDE hotkey binding instructions
 - `jippity-prompt` — PyQt6 helper for the prompt dialog (input + continue-thread checkbox)
-- `jippity-history` — PyQt6 helper for the history viewer (`jippity --history`)
+- `jippity-history` — PyQt6 helper for the history viewer (`jippity --history`; unavailable without PyQt6)
 - `jippity-tools` — scans `tools/` dir, emits a `[Available jippity tools]` index block for the codex context (or `--json` / `--list` for introspection)
+- `jippity-doctor` — read-only local diagnostic report (`--json` for structured output)
 
 Toolbar removed:
 - `jippity-toggle` / `jippity-reset` — deleted. The continue-thread checkbox replaced toggle; reset is no longer a separate script.
@@ -30,7 +31,8 @@ Toolbar removed:
 - **Spectacle noise suppressed.** Stderr redirected to `/dev/null` to hide Tesseract library warnings.
 - **Notification popup.** `kdialog --passivepopup "Jippity response ready" 3` after each completion.
 - **No streaming.** Blocks for full response. Streaming possible later.
-- **Tools.** Active manifests in `tools/` use `# @tool` front-matter (`@tool`, `@description`, `@usage`, `@example`, `@installed-by`). `jippity-tools` scans them and prepends an `[Available jippity tools]` index block to Codex context; the history viewer's "Tools…" button shows the same index via `jippity-tools --json`. A manifest does not install a command; external commands must be available in `$PATH`. Active tools expose a per-prompt, default-off unsandboxed execution option.
+- **Tools.** Active manifests in `tools/` use `# @tool` front-matter (`@tool`, optional `@command`, `@description`, `@usage`, `@example`, `@installed-by`). `jippity-tools` scans them and prepends an `[Available jippity tools]` index block to Codex context; the history viewer's "Tools…" button shows the same index via `jippity-tools --json`. A manifest does not install a command; external commands must be available in `$PATH`. Active tools expose a per-prompt, default-off unsandboxed execution option.
+- **Doctor.** `jippity-doctor` reports platform, dependencies, voice readiness, scripts, state metadata, and active manifests without reading history contents or changing files. It is local-only, never starts a Codex conversation or model/API request, and may run `codex --version` locally. The optional `examples/tools/jippity-doctor` manifest is inactive until copied to `tools/`; it requires neither network access nor sandbox bypass.
 
 ### What was validated
 

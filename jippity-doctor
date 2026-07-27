@@ -1,0 +1,284 @@
+#!/usr/bin/env python3
+"""Read-only local diagnostics for Jippity."""
+import json
+import os
+import platform
+import shutil
+import shlex
+import subprocess
+import sys
+
+from jippity_common import WHISPER_BINARIES, find_model, parse_manifest
+
+SCHEMA = "jippity-doctor/v1"
+SCHEMA_VERSION = 1
+
+
+def sanitize(path, home=None):
+    home = home or os.path.expanduser("~")
+    path = os.path.abspath(path)
+    if path == home or path.startswith(home + os.sep):
+        return "~" + path[len(home):]
+    return path
+
+
+def sanitize_text(value, home=None):
+    """Remove a literal home path from external command output and errors."""
+    home = home or os.path.expanduser("~")
+    return str(value).replace(home, "~")
+
+
+def command(name):
+    return shutil.which(name)
+
+
+def state_voice_enabled(state_file):
+    try:
+        with open(state_file, encoding="utf-8") as source:
+            for line in source:
+                if line.strip().startswith("VOICE_ENABLED="):
+                    return line.split("=", 1)[1].strip().strip('"') == "true"
+    except (OSError, UnicodeError):
+        return None
+    return False
+
+
+def state_has_basic_syntax(state_file):
+    """Validate only Jippity's expected state keys without evaluating values."""
+    allowed = {"THREAD_ID", "LAST_MODE", "CONTINUE_DEFAULT", "VOICE_ENABLED"}
+    try:
+        with open(state_file, encoding="utf-8") as source:
+            for line in source:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if "=" not in stripped:
+                    return False
+                key, value = stripped.split("=", 1)
+                if key.strip() not in allowed:
+                    return False
+                if key.strip() in {"CONTINUE_DEFAULT", "VOICE_ENABLED"}:
+                    if value.strip().strip('"') not in {"true", "false"}:
+                        return False
+    except (OSError, UnicodeError):
+        return False
+    return True
+
+
+def check(checks, ident, status, message, fix=""):
+    checks.append({"id": ident, "status": status, "severity": status,
+                   "message": message, "fix": fix})
+
+
+def build_report(script_dir=None, environ=None, platform_name=None):
+    env = os.environ if environ is None else environ
+    platform_name = sys.platform if platform_name is None else platform_name
+    home = env.get("HOME", os.path.expanduser("~"))
+    script_dir = os.path.abspath(script_dir or os.path.dirname(__file__))
+    config_base = env.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+    data_base = env.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
+    config_dir = os.path.join(config_base, "jippity")
+    data_dir = os.path.join(data_base, "jippity")
+    state_file = os.path.join(config_dir, "state")
+    history_file = os.path.join(data_dir, "history.jsonl")
+    checks = []
+
+    linux = platform_name.startswith("linux")
+    check(checks, "platform.linux", "PASS" if linux else "FAIL",
+          "Linux detected" if linux else "Jippity is designed for Linux",
+          "" if linux else "Run Jippity on Linux for supported desktop integration.")
+    check(checks, "platform.kernel", "PASS", "Kernel: " + platform.release())
+    check(checks, "platform.architecture", "PASS", "Architecture: " + platform.machine())
+    desktop = env.get("XDG_CURRENT_DESKTOP") or env.get("DESKTOP_SESSION")
+    kde = bool((desktop and "KDE" in desktop.upper()) or
+               env.get("KDE_FULL_SESSION", "").lower() == "true")
+    check(checks, "platform.desktop", "PASS" if desktop else "WARN",
+          "Desktop: KDE Plasma" if kde else
+          ("Desktop environment detected" if desktop else "Desktop environment not detected"),
+          "" if desktop else "Run from a desktop session when diagnosing desktop integration.")
+    session = env.get("XDG_SESSION_TYPE")
+    check(checks, "platform.session", "PASS" if session == "wayland" else "WARN",
+          "Session: " + session if session in {"wayland", "x11"} else
+          ("Other session type detected" if session else "Session type not detected"),
+          "" if session == "wayland" else "Use a Wayland session for Jippity's tested workflow.")
+    check(checks, "platform.kde", "PASS" if kde else "WARN",
+          "KDE Plasma detected" if kde else "KDE Plasma not detected",
+          "" if kde else "Use KDE Plasma for Jippity's tested workflow.")
+
+    for name in ("codex", "spectacle", "kdialog", "jq", "python3",
+                  "bash", "cat", "date", "dirname", "fold", "grep", "mkdir", "mktemp", "pwd", "rm", "tr", "wc"):
+        found = command(name)
+        check(checks, "dependency." + name, "PASS" if found else "FAIL",
+              name + (" available" if found else " is missing"),
+              "Install " + name + " and ensure it is available in PATH." if not found else "")
+    codex = command("codex")
+    if codex:
+        try:
+            result = subprocess.run([codex, "--version"], stdin=subprocess.DEVNULL,
+                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                    text=True, timeout=2, check=False)
+            version = (sanitize_text(result.stdout.strip().splitlines()[0])
+                       if result.stdout.strip() else "unavailable")
+        except (OSError, subprocess.TimeoutExpired):
+            version = "unavailable"
+        check(checks, "dependency.codex_version", "PASS", "Codex version: " + version)
+
+    try:
+        __import__("PyQt6")
+        check(checks, "recommended.pyqt6", "PASS", "PyQt6 available")
+    except ImportError:
+        check(checks, "recommended.pyqt6", "WARN",
+              "PyQt6 not available; prompts use the KDialog fallback and the history viewer is unavailable",
+              "Install PyQt6 for the combined prompt dialog and history viewer.")
+
+    parecord = command("parecord")
+    whisper = next((command(name) for name in WHISPER_BINARIES if command(name)), None)
+    model = find_model()
+    check(checks, "voice.parecord", "PASS" if parecord else "WARN", "parecord " + ("available" if parecord else "not found"),
+          "" if parecord else "Install parecord or a PipeWire/PulseAudio compatibility package.")
+    check(checks, "voice.whisper", "PASS" if whisper else "WARN", "Whisper executable " + ("available" if whisper else "not found"),
+          "" if whisper else "Install whisper.cpp and ensure whisper-cli or whisper is in PATH.")
+    check(checks, "voice.model", "PASS" if model else "WARN", "Whisper model " + ("found at " + sanitize(model) if model else "not found"),
+          "" if model else "Install or configure a compatible Whisper model.")
+    enabled = state_voice_enabled(state_file)
+    check(checks, "voice.enabled", "PASS" if enabled else "WARN",
+          "Voice input is enabled" if enabled else "Voice input is disabled",
+          "" if enabled else "Run jippity --voice after optional voice dependencies are ready.")
+
+    for name in ("jippity", "jippity-window", "jippity-screen", "jippity-region",
+                 "jippity-quick", "jippity-prompt", "jippity-history", "jippity-setup",
+                 "jippity-tools", "jippity-doctor"):
+        path = os.path.join(script_dir, name)
+        executable = os.path.isfile(path) and os.access(path, os.X_OK)
+        check(checks, "script." + name, "PASS" if executable else "FAIL",
+              name + (" is executable" if executable else " is missing or not executable"),
+              "Restore the bundled script and its executable permission." if not executable else "")
+    check(checks, "state.config_dir", "PASS" if os.path.isdir(config_dir) else "WARN",
+          "Config directory " + ("exists" if os.path.isdir(config_dir) else "does not exist") + ": " + sanitize(config_dir),
+          "" if os.path.isdir(config_dir) else "Run jippity-setup to create Jippity directories.")
+    if os.path.isdir(config_dir):
+        accessible = os.access(config_dir, os.R_OK) and os.access(config_dir, os.W_OK)
+        check(checks, "state.config_writable", "PASS" if accessible else "WARN",
+               "Config directory is " + ("readable and writable" if accessible else "not fully accessible"),
+              "" if accessible else "Check permissions on the Jippity config directory.")
+    check(checks, "state.file", "PASS" if os.path.isfile(state_file) else "WARN",
+           "State file " + ("present" if os.path.isfile(state_file) else "not present") + ": " + sanitize(state_file),
+           "" if os.path.isfile(state_file) else "Run jippity-setup to create the initial state file.")
+    if os.path.isfile(state_file):
+        valid = state_has_basic_syntax(state_file)
+        check(checks, "state.validity", "PASS" if valid else "WARN",
+              "State file has " + ("basic key/value syntax" if valid else "unexpected syntax"),
+              "" if valid else "Review the Jippity state file without exposing its contents.")
+    check(checks, "history.location", "PASS" if os.path.isdir(data_dir) else "WARN",
+          "Data directory " + ("exists" if os.path.isdir(data_dir) else "does not exist") + ": " + sanitize(data_dir),
+          "" if os.path.isdir(data_dir) else "Run jippity-setup to create Jippity directories.")
+    if os.path.isdir(data_dir):
+        accessible = os.access(data_dir, os.R_OK) and os.access(data_dir, os.W_OK)
+        check(checks, "history.data_writable", "PASS" if accessible else "WARN",
+               "Data directory is " + ("readable and writable" if accessible else "not fully accessible"),
+              "" if accessible else "Check permissions on the Jippity data directory.")
+    if os.path.exists(history_file):
+        readable = os.access(history_file, os.R_OK)
+        writable = os.access(history_file, os.W_OK)
+        accessible = readable and writable
+        check(checks, "history.access", "PASS" if accessible else "WARN",
+              "History file is " + ("readable and writable" if accessible else "not fully accessible") + ": " + sanitize(history_file),
+              "Check permissions on the Jippity history file." if not accessible else "")
+    else:
+        check(checks, "history.access", "WARN", "History file is not present: " + sanitize(history_file),
+              "Run a Jippity prompt to create local history.")
+
+    tools_dir = os.path.join(script_dir, "tools")
+    if os.path.isdir(tools_dir):
+        for entry in sorted(os.listdir(tools_dir)):
+            path = os.path.join(tools_dir, entry)
+            if entry.startswith(".") or not os.path.isfile(path):
+                continue
+            try:
+                manifest = parse_manifest(path)
+            except (OSError, UnicodeError):
+                manifest = None
+            ident = "tool." + entry.replace(" ", "_")
+            if not manifest:
+                check(checks, ident, "WARN", "Tool manifest is malformed: " + entry,
+                      "Use # @tool and valid comment front matter.")
+            else:
+                try:
+                    parts = shlex.split(manifest["command"] or manifest["name"])
+                except ValueError:
+                    parts = []
+                if not parts:
+                    check(checks, ident, "WARN", "Tool manifest has an invalid command: " + entry,
+                          "Correct the command in the active manifest.")
+                    continue
+                executable = parts[0]
+                if manifest["installed_by"].startswith("jippity"):
+                    bundled = os.path.join(script_dir, executable)
+                    available = (not os.path.isabs(executable) and os.path.isfile(bundled)
+                                 and os.access(bundled, os.X_OK))
+                elif os.path.isabs(executable):
+                    available = os.path.isfile(executable) and os.access(executable, os.X_OK)
+                else:
+                    available = bool(command(executable))
+                if not available:
+                    check(checks, ident, "WARN", "Tool command is unavailable: " + sanitize(executable, home),
+                          "Install it or correct the active manifest.")
+                else:
+                    check(checks, ident, "PASS", "Tool manifest is usable: " + manifest["name"])
+    overall = "FAIL" if any(item["status"] == "FAIL" for item in checks) else "PASS"
+    return {"schema": SCHEMA, "schema_version": SCHEMA_VERSION,
+            "overall": overall, "checks": checks}
+
+
+def print_human(report):
+    groups = (("Platform", "platform."), ("Required dependencies", "dependency."),
+              ("Recommended dependencies", "recommended."), ("Optional voice support", "voice."),
+              ("Jippity files and state", ("script.", "state.", "history.", "tool.")))
+    for title, prefixes in groups:
+        print(title + ":")
+        prefixes = (prefixes,) if isinstance(prefixes, str) else prefixes
+        for item in report["checks"]:
+            if item["id"].startswith(prefixes):
+                print("  {status:<4} {message}".format(**item))
+                if item["status"] in {"WARN", "FAIL"} and item["fix"]:
+                    print("       Fix: " + item["fix"])
+    print("Overall: " + report["overall"])
+    fixes = [item["fix"] for item in report["checks"]
+             if item["status"] in {"WARN", "FAIL"} and item["fix"]]
+    if fixes:
+        print("Actionable fixes:")
+        for fix in dict.fromkeys(fixes):
+            print("  - " + fix)
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if argv == ["--help"] or argv == ["-h"]:
+        print("""Usage: jippity-doctor [--json|--help]
+
+Read-only local Jippity diagnostics. Checks platform support, dependencies,
+voice readiness, Jippity files and state metadata, and active manifests.
+
+Options:
+  --json   Emit only the jippity-doctor/v1 JSON report.
+  --help   Show this help text.
+
+Exit codes: 0 when required runtime checks pass; 1 when a required check
+fails; 2 for invalid arguments. The doctor is local and read-only: it does
+not access the network, start a Codex conversation, make a model/API request,
+use danger-full-access, read history contents, or change files. It may run
+codex --version locally to report the installed version.""")
+        return 0
+    if argv not in ([], ["--json"]):
+        print("Usage: jippity-doctor [--json|--help]", file=sys.stderr)
+        return 2
+    report = build_report()
+    if argv == ["--json"]:
+        print(json.dumps(report, sort_keys=True))
+    else:
+        print_human(report)
+    return 0 if report["overall"] == "PASS" else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -33,7 +33,7 @@ Dependencies (setup creates directories; it does not install packages):
   - Recommended: PyQt6 enables a combined input + continue-thread checkbox
     dialog and the history viewer.
     It may already be installed depending on your distribution. Without it,
-    Jippity falls back to a two-step kdialog flow.
+    ordinary prompts use a two-step kdialog flow and the history viewer is unavailable.
   - Optional voice input (off by default): parecord (or your PipeWire/PulseAudio
     compatibility package), whisper.cpp, and a compatible Whisper model.
     Arch/CachyOS example: paru -S whisper.cpp whisper.cpp-model-small.en
@@ -69,6 +69,19 @@ Commands:
   $SCRIPT_DIR/jippity --mode <region|screen|window|quick>   Ask a question
   $SCRIPT_DIR/jippity --history                             Browse/search/delete threads, set active
   $SCRIPT_DIR/jippity --voice                               Toggle optional voice input
+  $SCRIPT_DIR/jippity-doctor                                Read-only local diagnostics
+  $SCRIPT_DIR/jippity-doctor --json                         Structured diagnostics
+
+Doctor checks the supported desktop environment, dependencies, optional voice
+support, Jippity files/state metadata, and active manifests. It does not access
+the network, start a Codex conversation, read history contents, or modify any
+Jippity data. It may run codex --version locally and never makes a model/API request.
+Exit codes: 0 required checks pass, 1 required failure, 2 invalid usage.
+
+Optional Codex troubleshooting tool (metadata only; doctor already ships):
+  cp "$SCRIPT_DIR/examples/tools/jippity-doctor" "$SCRIPT_DIR/tools/jippity-doctor"
+This manifest does not install anything and does not require network access or
+unsandboxed execution.
 
 Continue-thread flow:
   - When a thread exists, the dialog shows a "Continue thread" checkbox

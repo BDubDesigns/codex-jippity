@@ -5,8 +5,10 @@ or a plain-text index block to prepend to codex prompts.
 Tool file format (front-matter as comments):
     # @tool <name>
     # @description <one-line>
+    # @command <invocation>          (optional)
     # @usage <usage line>            (repeatable)
     # @example <example command>     (optional, repeatable)
+    # @instruction <guidance>        (optional, repeatable)
     # @installed-by <external|jippity> [<notes>]
 
 Usage:
@@ -19,7 +21,9 @@ Nonexistent tools/ dir → empty output, exit 0.
 """
 import json
 import os
+import shlex
 import sys
+from jippity_common import parse_manifest
 
 
 def tools_dir():
@@ -28,30 +32,17 @@ def tools_dir():
 
 
 def parse_tool(path):
-    tool = {
-        "name": "",
-        "description": "",
-        "usage": [],
-        "example": [],
-        "installed_by": "",
-    }
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            s = line.strip()
-            if not s.startswith("#"):
-                break
-            body = s.lstrip("# ").rstrip()
-            if body.startswith("@tool "):
-                tool["name"] = body[len("@tool "):].strip()
-            elif body.startswith("@description "):
-                tool["description"] = body[len("@description "):].strip()
-            elif body.startswith("@usage "):
-                tool["usage"].append(body[len("@usage "):].strip())
-            elif body.startswith("@example "):
-                tool["example"].append(body[len("@example "):].strip())
-            elif body.startswith("@installed-by "):
-                tool["installed_by"] = body[len("@installed-by "):].strip()
-    return tool if tool["name"] else None
+    return parse_manifest(path)
+
+
+def shell_command_path(path):
+    """Return a shell-safe path without exposing a home-relative install path."""
+    home = os.path.abspath(os.path.expanduser("~"))
+    path = os.path.abspath(path)
+    if path.startswith(home + os.sep):
+        relative = os.path.relpath(path, home)
+        return '"${HOME}"/' + shlex.quote(relative)
+    return shlex.quote(path)
 
 
 def load_tools():
@@ -65,6 +56,19 @@ def load_tools():
             continue
         t = parse_tool(path)
         if t:
+            # Older manifests use the tool name as their command implicitly.
+            if not t["command"]:
+                t["command"] = t["name"]
+            # Bundled commands are always advertised with a stable absolute path,
+            # so a Codex process started outside this repository can invoke them.
+            if t["command"] and t["installed_by"].startswith("jippity"):
+                try:
+                    parts = shlex.split(t["command"])
+                except ValueError:
+                    parts = []
+                bundled = os.path.join(os.path.dirname(os.path.abspath(__file__)), parts[0]) if parts else ""
+                if bundled and os.path.isfile(bundled) and os.access(bundled, os.X_OK):
+                    t["command"] = " ".join([shell_command_path(bundled)] + [shlex.quote(p) for p in parts[1:]])
             tools.append(t)
     return tools
 
@@ -77,10 +81,14 @@ def index_block(tools):
                  "when the user asks or when they clearly help answer.")
     for t in tools:
         lines.append(f"- {t['name']}: {t['description']}")
+        if t["command"]:
+            lines.append(f"    command: {t['command']}")
         for u in t["usage"]:
             lines.append(f"    usage: {u}")
         for ex in t["example"]:
             lines.append(f"    example: {ex}")
+        for instruction in t["instruction"]:
+            lines.append(f"    instruction: {instruction}")
         if t["installed_by"]:
             lines.append(f"    installed-by: {t['installed_by']}")
     return "\n".join(lines)

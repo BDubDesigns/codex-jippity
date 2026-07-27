@@ -22,7 +22,7 @@ Phases 0–4.6 + voice input (Phase 6) implemented and tested on CachyOS / KDE P
 
 ## Install
 
-### Required (already in your KDE Plasma install)
+### Required
 
 - `codex` (from OpenAI or your package manager)
 - `spectacle`, `kdialog`, `jq`, `parecord`

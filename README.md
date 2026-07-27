@@ -14,11 +14,9 @@ A lightweight KDE Plasma and Wayland frontend for the [Codex CLI](https://github
 
 </div>
 
-<!--
 <p align="center">
   <img src="docs/jippity-demo.gif" alt="Jippity capturing a desktop region, accepting a question, and showing the Codex response" width="900">
 </p>
--->
 
 Jippity is a thin desktop UX layer, not a new model or agent framework. The Codex CLI still owns authentication, model access, and model execution. Jippity handles the hotkeys, screenshots, prompt window, local thread history, and desktop response.
 

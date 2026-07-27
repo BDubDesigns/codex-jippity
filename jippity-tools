@@ -8,6 +8,7 @@ Tool file format (front-matter as comments):
     # @command <invocation>          (optional)
     # @usage <usage line>            (repeatable)
     # @example <example command>     (optional, repeatable)
+    # @instruction <guidance>        (optional, repeatable)
     # @installed-by <external|jippity> [<notes>]
 
 Usage:
@@ -76,6 +77,8 @@ def index_block(tools):
             lines.append(f"    usage: {u}")
         for ex in t["example"]:
             lines.append(f"    example: {ex}")
+        for instruction in t["instruction"]:
+            lines.append(f"    instruction: {instruction}")
         if t["installed_by"]:
             lines.append(f"    installed-by: {t['installed_by']}")
     return "\n".join(lines)

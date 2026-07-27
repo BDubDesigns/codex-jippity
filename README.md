@@ -37,7 +37,7 @@ Some dependencies may already be installed depending on your distribution. KDE P
 
 ### Recommended
 
-- PyQt6, for the combined native prompt dialog and history viewer. Without it, Jippity falls back to a two-step KDialog prompt flow.
+- PyQt6, for the combined native prompt dialog and graphical history viewer. Without it, ordinary prompts fall back to a two-step KDialog flow, and `jippity --history` / Super+H is unavailable.
 
 ### Optional voice input
 
@@ -93,7 +93,7 @@ Run the bundled diagnostic directly from any directory:
 /path/to/codex-jippity/jippity-doctor --json
 ```
 
-It checks the platform, required and recommended dependencies, optional voice support, bundled scripts, and active tool manifests. `--json` emits only the simple `jippity-doctor/v1` report with an overall result and stable check IDs. It is local and read-only: it does not access the network, run Codex, read history contents, change configuration, or repair anything. It exits `0` when required checks pass (warnings are allowed), `1` for required runtime failures, and `2` for invalid usage.
+It checks the platform, required and recommended dependencies, optional voice support, bundled scripts, and active tool manifests. `--json` emits only the simple `jippity-doctor/v1` report with an overall result and stable check IDs. It is local and read-only: it does not access the network, start a Codex conversation, make a model/API request, read history contents, change configuration, or repair anything. It may run `codex --version` locally to report the installed version. It never uses `danger-full-access` or uploads a support report. It exits `0` when required checks pass (warnings are allowed), `1` for required runtime failures, and `2` for invalid usage.
 
 ## Custom tools
 
@@ -109,6 +109,7 @@ Documentation-only manifest format:
 # @command example-command
 # @usage example-command [options]
 # @example example-command --help
+# @instruction Guidance for Codex (repeatable)
 # @installed-by external (must be installed separately and available in $PATH)
 ```
 

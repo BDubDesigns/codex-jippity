@@ -16,7 +16,7 @@ A Linux-only KDE Plasma/Wayland hotkey frontend for [Codex CLI](https://github.c
 | `jippity-region` | Wrapper → `jippity --mode region` |
 | `jippity-quick` | Wrapper → `jippity --mode quick` |
 | `jippity-prompt` | PyQt6 helper: prompt input + continue-thread checkbox dialog + (optional) hold-to-talk voice |
-| `jippity-history` | PyQt6 helper: browse/search/delete threads, set active thread |
+| `jippity-history` | PyQt6 helper: browse/search/delete threads, set active thread; unavailable without PyQt6 |
 | `jippity-setup` | Create dirs, print KDE hotkey instructions |
 | `jippity-tools` | Scan `tools/` dir, emit tools index block for codex context or JSON for viewers |
 | `jippity-doctor` | Read-only local diagnostics for dependencies, platform, state, and active manifests |
@@ -35,7 +35,7 @@ A Linux-only KDE Plasma/Wayland hotkey frontend for [Codex CLI](https://github.c
 - **Clean output** — `codex exec -o <file>` writes only the last message, no metadata header.
 - **`--ephemeral`** — all `codex exec` calls use `--ephemeral` to avoid polluting codex's session store with one-off questions.
 - **Local thread resume** — instead of `codex exec resume`, reconstruct conversation history from local `history.jsonl` and prepend to the new prompt. More reliable, no dependency on codex session store, works even if codex clears sessions.
-- **Combined prompt dialog** — uses a tiny PyQt6 helper (`jippity-prompt`) if available (input + continue-thread checkbox in one native Qt dialog), falls back to `kdialog --inputbox` + `kdialog --yesno`. No separate toggle/reset flow — checkbox is sticky across runs.
+- **Combined prompt dialog** — uses a tiny PyQt6 helper (`jippity-prompt`) if available (input + continue-thread checkbox in one native Qt dialog), falls back to `kdialog --inputbox` + `kdialog --yesno` for ordinary prompts. The graphical history viewer requires PyQt6 and is unavailable without it. No separate toggle/reset flow — checkbox is sticky across runs.
 - **Voice input (hold-to-talk)** — when `VOICE_ENABLED=true` in state file and `whisper-cli` + a model file are installed, `jippity-prompt` adds a "Hold to Talk" button and listens for Alt-hold. Both call the same `start_recording()` / `stop_and_transcribe()` pair: `parecord` writes 16kHz mono WAV, then `whisper-cli -nt` transcribes and inserts at the cursor (no auto-submit — user can edit first). Off by default, zero-cost fallback if deps are missing.
 - **History viewer** — `jippity --history` launches a PyQt6 window (`jippity-history`) listing threads (most recent first), full transcript on selection, search across prompts+responses, multi-select delete (also removes screenshot files), and "Set as Active Thread" (writes THREAD_ID + CONTINUE_DEFAULT=true so next prompt auto-continues).
 - **JSONL storage** — entries are written via `jq -nc` (compact, one per line). The viewer's parser is tolerant of legacy pretty-printed entries and migrates them to compact form on the first delete.
@@ -43,7 +43,7 @@ A Linux-only KDE Plasma/Wayland hotkey frontend for [Codex CLI](https://github.c
 - **Spectacle noise suppressed** — stderr to `/dev/null`.
 - **Notification** — `kdialog --passivepopup` after each response.
 - **Tools** — active manifests in `tools/` (small files with `# @tool` front-matter) are scanned by `jippity-tools` and prepended as an index block to Codex context. A manifest does not install its command; external commands must be in `$PATH`. Active tools expose a per-prompt, default-off unsandboxed execution option.
-- **Doctor** — `jippity-doctor` is a standard-library, local, read-only command. It does not read history contents, mutate Jippity files, access the network, or invoke Codex. It returns 0 for required-check success, 1 for required failures, and 2 for usage errors.
+- **Doctor** — `jippity-doctor` is a standard-library, local, read-only command. It does not read history contents, mutate Jippity files, access the network, start a Codex conversation, or make a model/API request. It may run `codex --version` locally. It returns 0 for required-check success, 1 for required failures, and 2 for usage errors.
 
 ## Development roadmap
 
@@ -72,6 +72,7 @@ Tool file format:
 # @command <invocation>           (optional; defaults to tool name)
 # @usage <usage line>            (repeatable)
 # @example <example command>     (optional, repeatable)
+# @instruction <guidance>        (optional, repeatable)
 # @installed-by <external|jippity> [<notes>]
 ```
 

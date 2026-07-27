@@ -72,7 +72,27 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("Platform:", result.stdout)
         self.assertIn("Required dependencies:", result.stdout)
         self.assertIn("Optional voice support:", result.stdout)
-        self.assertIn("Actionable fixes:", result.stdout)
+
+    def test_passing_checks_do_not_add_actionable_fixes(self):
+        sys.path.insert(0, str(ROOT))
+        try:
+            spec = importlib.util.spec_from_loader(
+                "doctor", SourceFileLoader("doctor", str(DOCTOR))
+            )
+            doctor = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(doctor)
+        finally:
+            sys.path.pop(0)
+        report = {"overall": "PASS", "checks": [
+            {"id": "platform.linux", "status": "PASS", "message": "Linux detected", "fix": "ignore me"},
+        ]}
+        from io import StringIO
+        from contextlib import redirect_stdout
+        output = StringIO()
+        with redirect_stdout(output):
+            doctor.print_human(report)
+        self.assertNotIn("Actionable fixes:", output.getvalue())
+        self.assertNotIn("ignore me", output.getvalue())
 
     def test_failing_json_is_valid_json(self):
         (self.bin / "jq").unlink()
@@ -85,7 +105,7 @@ class DoctorTests(unittest.TestCase):
     def test_optional_and_recommended_warnings_do_not_fail(self):
         result = self.run_doctor()
         self.assertEqual(result.returncode, 0)
-        self.assertIn("WARN PyQt6 not available", result.stdout)
+        self.assertIn("WARN PyQt6 not available; prompts use the KDialog fallback and the history viewer is unavailable", result.stdout)
         self.assertIn("WARN parecord not found", result.stdout)
 
     def test_usage_error(self):
@@ -98,6 +118,8 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("Exit codes: 0", result.stdout)
         self.assertIn("read-only", result.stdout)
+        self.assertIn("codex --version", result.stdout)
+        self.assertIn("model/API request", result.stdout)
 
     def test_non_linux_platform_is_a_required_failure(self):
         sys.path.insert(0, str(ROOT))
@@ -144,8 +166,9 @@ class DoctorTests(unittest.TestCase):
                                         text=True, capture_output=True, check=False).stdout, "")
         install = self.base / "install"
         (install / "tools").mkdir(parents=True)
-        for name in ("jippity", "jippity-prompt", "jippity-history", "jippity-tools",
-                     "jippity-common", "jippity-doctor"):
+        for name in ("jippity", "jippity-window", "jippity-screen", "jippity-region",
+                     "jippity-quick", "jippity-prompt", "jippity-history", "jippity-setup",
+                     "jippity-tools", "jippity-common", "jippity-doctor"):
             source = ROOT / ("jippity_common.py" if name == "jippity-common" else name)
             target = install / ("jippity_common.py" if name == "jippity-common" else name)
             shutil.copy2(source, target)
@@ -157,7 +180,16 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(listed.stdout.strip(), "jippity-doctor")
         block = subprocess.run([sys.executable, str(install / "jippity-tools")], cwd=self.base,
                                text=True, capture_output=True, check=False).stdout
+        tool_json = subprocess.run([sys.executable, str(install / "jippity-tools"), "--json"],
+                                   cwd=self.base, text=True, capture_output=True, check=False).stdout
+        instructions = json.loads(tool_json)[0]["instruction"]
+        self.assertEqual(len(instructions), 5)
         self.assertIn(str(install / "jippity-doctor"), block)
+        self.assertIn("Use the default human-readable report for ordinary troubleshooting.", block)
+        self.assertIn("Prefer --json when structured inspection helps.", block)
+        self.assertIn("Summarize findings and recommended fixes instead of dumping raw JSON.", block)
+        self.assertIn("The doctor diagnoses only and never repairs the system.", block)
+        self.assertIn("It requires neither networking nor sandbox bypass.", block)
         (install / "tools/broken").write_text("# @description missing tool name\n")
         (install / "tools/external-missing").write_text(
             "# @tool external-missing\n# @command external-missing\n"
@@ -170,6 +202,57 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(checks["tool.broken"]["status"], "WARN")
         self.assertEqual(checks["tool.external-missing"]["status"], "WARN")
         self.assertEqual(manifest_before, (install / "tools/jippity-doctor").read_bytes())
+
+    def test_missing_wrapper_is_required_failure(self):
+        install = self.base / "install"
+        install.mkdir()
+        for name in ("jippity", "jippity-window", "jippity-screen", "jippity-region",
+                     "jippity-quick", "jippity-prompt", "jippity-history", "jippity-setup",
+                     "jippity-tools", "jippity-doctor"):
+            target = install / name
+            shutil.copy2(ROOT / name, target)
+            target.chmod(0o755)
+        (install / "jippity-window").chmod(0o644)
+        sys.path.insert(0, str(ROOT))
+        try:
+            spec = importlib.util.spec_from_loader(
+                "doctor", SourceFileLoader("doctor", str(DOCTOR))
+            )
+            doctor = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(doctor)
+        finally:
+            sys.path.pop(0)
+        checks = {item["id"]: item for item in doctor.build_report(str(install), self.env)["checks"]}
+        self.assertEqual(checks["script.jippity-window"]["status"], "FAIL")
+
+    def test_command_validation_for_absolute_relative_and_bundled_tools(self):
+        install = self.base / "install"
+        tools = install / "tools"
+        tools.mkdir(parents=True)
+        bundled = install / "jippity-doctor"
+        bundled.write_text("#!/bin/sh\n", encoding="utf-8")
+        bundled.chmod(0o755)
+        absolute = self.base / "absolute-tool"
+        absolute.write_text("#!/bin/sh\n", encoding="utf-8")
+        absolute.chmod(0o755)
+        (tools / "absolute-missing").write_text("# @tool absolute-missing\n# @command /missing/tool\n# @installed-by external\n")
+        (tools / "absolute-valid").write_text(f"# @tool absolute-valid\n# @command {absolute}\n# @installed-by external\n")
+        (tools / "relative-missing").write_text("# @tool relative-missing\n# @command no-such-tool\n# @installed-by external\n")
+        (tools / "bundled-valid").write_text("# @tool bundled-valid\n# @command jippity-doctor\n# @installed-by jippity\n")
+        sys.path.insert(0, str(ROOT))
+        try:
+            spec = importlib.util.spec_from_loader(
+                "doctor", SourceFileLoader("doctor", str(DOCTOR))
+            )
+            doctor = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(doctor)
+        finally:
+            sys.path.pop(0)
+        checks = {item["id"]: item for item in doctor.build_report(str(install), self.env)["checks"]}
+        self.assertEqual(checks["tool.absolute-missing"]["status"], "WARN")
+        self.assertEqual(checks["tool.absolute-valid"]["status"], "PASS")
+        self.assertEqual(checks["tool.relative-missing"]["status"], "WARN")
+        self.assertEqual(checks["tool.bundled-valid"]["status"], "PASS")
 
 
 if __name__ == "__main__":

@@ -24,7 +24,7 @@ def find_model(paths=MODEL_PATHS):
 def parse_manifest(path):
     """Parse comment front matter, preserving manifests from before @command."""
     tool = {"name": "", "description": "", "usage": [], "example": [],
-            "installed_by": "", "command": ""}
+            "instruction": [], "installed_by": "", "command": ""}
     fields = {"tool": "name", "description": "description",
               "installed-by": "installed_by", "command": "command"}
     with open(path, "r", encoding="utf-8") as source:
@@ -37,7 +37,7 @@ def parse_manifest(path):
                 continue
             key, value = body[1:].split(" ", 1)
             value = value.strip()
-            if key in ("usage", "example"):
+            if key in ("usage", "example", "instruction"):
                 tool[key].append(value)
             elif key in fields:
                 tool[fields[key]] = value

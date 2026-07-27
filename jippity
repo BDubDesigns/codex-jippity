@@ -94,6 +94,11 @@ CONTINUE_FLAG="FALSE"
 BYPASS_SANDBOX=false
 HAS_TOOLS=false
 
+# Only active manifests in tools/ make custom commands available to Codex.
+if [ -x "$SCRIPT_DIR/jippity-tools" ] && "$SCRIPT_DIR/jippity-tools" --list 2>/dev/null | grep -q .; then
+    HAS_TOOLS=true
+fi
+
 if python3 -c "import PyQt6" 2>/dev/null && [ -x "$PROMPT_HELPER" ]; then
     RESULT_FILE=$(mktemp "$TMPDIR/prompt.XXXXXX.json")
     HAS_THREAD_ARG=0
@@ -103,10 +108,6 @@ if python3 -c "import PyQt6" 2>/dev/null && [ -x "$PROMPT_HELPER" ]; then
     VOICE_ARG=0
     [ "$VOICE_ENABLED" = true ] && VOICE_ARG=1
     HAS_TOOLS_ARG=0
-    # HAS_TOOLS may have been pre-set by the tools block; otherwise check via helper
-    if [ "$HAS_TOOLS" != true ] && [ -x "$SCRIPT_DIR/jippity-tools" ]; then
-        "$SCRIPT_DIR/jippity-tools" --list 2>/dev/null | grep -q . && HAS_TOOLS=true
-    fi
     $HAS_TOOLS && HAS_TOOLS_ARG=1
     if "$PROMPT_HELPER" "$RESULT_FILE" "$PROMPT_TEXT" "$HAS_THREAD_ARG" "$CONTINUE_DEFAULT_ARG" "$VOICE_ARG" "$HAS_TOOLS_ARG" </dev/null; then
         PROMPT=$(jq -r '.prompt // ""' "$RESULT_FILE" 2>/dev/null || true)
@@ -130,7 +131,7 @@ else
     else
         CONTINUE_DEFAULT=false
     fi
-    if $HAS_TOOLS && kdialog --default no --yesno "Allow network access (disable sandbox) for this prompt?"; then
+    if $HAS_TOOLS && kdialog --default no --yesno "Run Codex without sandboxing? Commands invoked by Codex may access local files and the network as your user. Enable this only when a trusted tool requires it."; then
         BYPASS_SANDBOX=true
     fi
 fi

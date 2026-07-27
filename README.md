@@ -1,123 +1,131 @@
 # Jippity
 
-A lightweight Linux desktop assistant that wraps the [Codex CLI](https://github.com/openai/codex). Press a hotkey → (optional screenshot) → type prompt → Codex answers. Pure shell + Python, no build system, no daemon.
+Jippity is a lightweight KDE Plasma and Wayland hotkey frontend for the [Codex CLI](https://github.com/openai/codex). Capture a region, window, or screen; ask a question; and receive the answer in a popup without interrupting your desktop workflow. It supports region, window, full-screen, and text-only prompts, plus local conversation threads with searchable history and the option to continue a previous thread. Optional Whisper transcription runs locally.
 
-## What it does
+It is implemented with shell and Python/PyQt6, with no daemon and no build system.
 
-Press a hotkey, optionally attach a screenshot of your screen/active window/selected region, type a prompt, and Codex answers in a popup window. Threads persist locally — continue a previous conversation, browse past threads, set an old thread as active, search and delete. Optional hold-to-talk voice input via Whisper.
+> **Current platform scope:** Jippity is Linux-only, designed for KDE Plasma on Wayland, and tested on CachyOS/Arch Linux. It has not yet been broadly tested or supported across other distributions or desktop environments.
 
-## Status
+<!-- Add a real screen recording or GIF here when one is available. -->
 
-Phases 0–4.6 + voice input (Phase 6) implemented and tested on CachyOS / KDE Plasma / Wayland. Rich GUI + tray (Phase 7) is the only remaining planned work.
+## Why I built this
 
-| Area | Status |
-|------|--------|
-| Hotkey → screenshot → prompt → Codex | Done |
-| Session resume via local history reconstruction | Done |
-| History storage (prompts, responses, screenshots, timestamps) | Done |
-| History viewer (browse, search, delete, set active) | Done |
-| Active-thread visibility in history viewer | Done |
-| Voice input (hold-to-talk via whisper.cpp) | Done |
-| Rich GUI + tray | Planned (Phase 7) |
+I wanted to ask Codex about something visible on my desktop without opening a terminal, manually creating or locating a screenshot, attaching it separately, and breaking my current workflow. Jippity keeps that flow to a hotkey, a capture when needed, and a question.
 
-## Install
+## Install and setup
+
+Clone the repository, enter it, and run setup:
+
+```bash
+git clone https://github.com/BDubDesigns/codex-jippity.git
+cd codex-jippity
+./jippity-setup
+```
+
+The setup script creates Jippity's local directories and prints KDE global-shortcut binding instructions. Install any missing dependencies first, then bind the commands in KDE System Settings to the full path of the `jippity` script.
 
 ### Required
 
-- `codex` (from OpenAI or your package manager)
-- `spectacle`, `kdialog`, `jq`, `parecord`
-- Standard Unix tools
-- Python 3 with PyQt6 (`python-pyqt6` — shipped with KDE Plasma)
+- Codex CLI (`codex`)
+- Spectacle (`spectacle`)
+- KDialog (`kdialog`)
+- `jq`
+- Python 3
+- Standard Unix commands used by the scripts, including `bash`, `cat`, `date`, `fold`, `grep`, `mkdir`, `mktemp`, `rm`, and `tr`
 
-### Optional: voice input
+Some dependencies may already be installed depending on your distribution. KDE Plasma installations do not necessarily include every dependency above.
+
+### Recommended
+
+- PyQt6, for the combined native prompt dialog and history viewer. Without it, Jippity falls back to a two-step KDialog prompt flow.
+
+### Optional voice input
+
+- `parecord`, or the applicable PipeWire/PulseAudio compatibility package
+- whisper.cpp
+- A compatible Whisper model
+
+For CachyOS/Arch Linux, for example:
 
 ```bash
 paru -S whisper.cpp whisper.cpp-model-small.en
 ```
 
-Then enable voice:
+Then enable voice input:
 
 ```bash
 ./jippity --voice
 ```
 
-## Setup
-
-```bash
-./jippity-setup
-```
-
-Creates config/state directories and prints KDE global-shortcut binding instructions.
+Voice input is off by default. When enabled and the dependencies are available, hold Alt or the on-screen button while the prompt is open, then release to transcribe locally into the prompt.
 
 ## Hotkeys
 
 | Key | Command | Action |
 |-----|---------|--------|
-| Super+S | `jippity --mode region` | Select region → screenshot → prompt → Codex |
-| Super+W | `jippity --mode screen` | Full screen → prompt → Codex |
-| Super+A | `jippity --mode window` | Active window → prompt → Codex |
-| Super+Q | `jippity --mode quick` | Prompt only → Codex |
-| Super+H | `jippity --history` | Browse/search/delete threads, set active |
-| Super+V | `jippity --voice` | Toggle voice input on/off |
+| Super+S | `jippity --mode region` | Select region, then ask Codex |
+| Super+W | `jippity --mode screen` | Capture full screen, then ask Codex |
+| Super+A | `jippity --mode window` | Capture active window, then ask Codex |
+| Super+Q | `jippity --mode quick` | Text-only prompt |
+| Super+H | `jippity --history` | Browse, search, delete, or continue threads |
+| Super+V | `jippity --voice` | Toggle optional voice input |
 
-Bind them in KDE System Settings → Shortcuts → Custom Shortcuts (point each at the full path of the `jippity` script).
+Bind them in KDE System Settings > Shortcuts > Custom Shortcuts.
 
-## Continue-thread flow
+## What it does
 
-- When a thread exists, the prompt dialog shows a "Continue previous thread" checkbox.
-- Default: unchecked (one-off question). Sticky: your last checkbox choice is remembered for next time.
-- Check it to send prior conversation context with your new prompt.
-- Uncheck it to start a fresh thread.
+- Captures a selected region, active window, or full screen, or accepts a text-only prompt.
+- Shows the Codex answer in a popup and stores local transcripts.
+- Lets you continue a previous thread, browse history, search prompts and responses, delete threads, and set an active thread.
+- Uses local history reconstruction for thread continuity rather than Codex session storage.
+- Uses `codex exec --ephemeral` for each request.
 
-## History viewer (Super+H)
+## Status and roadmap
 
-- Lists threads (most recent first) with exchange count and timestamp.
-- Active thread is marked with `▸` prefix, bold, and a status bar at top.
-- Click a thread to read the full transcript.
-- Search across prompts and responses.
-- Multi-select threads (Ctrl-click) and Delete to remove them and their screenshots.
-- "Set as Active Thread" makes the chosen thread active and pre-checks the continue checkbox for the next prompt.
+Core screenshot and text prompt flows work, as do local thread continuation and searchable history. Voice input is implemented. A richer GUI and tray are future work, not a requirement for using the current application. [Jippity Doctor is tracked separately in Issue #8](https://github.com/BDubDesigns/codex-jippity/issues/8).
 
-## Voice input (hold-to-talk)
+## Custom tools
 
-When `VOICE_ENABLED=true` in `~/.config/jippity/state` and `whisper-cli` + a model file are installed, `jippity-prompt` adds a "Hold to Talk" button and listens for Alt-hold. Both call the same record/transcribe pair:
+Custom tools are an advanced feature. Active manifests live in `tools/`. A manifest teaches Codex about a command; it does not install or implement that command. External commands must already be installed and available in `$PATH`. Bundled tools would include both a real executable command and an associated manifest.
 
-1. `parecord` writes 16 kHz mono WAV to a temp file
-2. On release, `whisper-cli -nt --no-timestamps -l en` transcribes the recording
-3. Result is inserted at the cursor with a trailing space — no auto-submit, you can edit before pressing Enter
+Review a command before teaching Codex to invoke it. Adding active tools may expose the per-prompt **Run Codex without sandboxing** option; treat tools that require unsandboxed execution cautiously.
 
-Off by default. `jippity --voice` toggles it on or off and persists the choice in `~/.config/jippity/state`.
+Documentation-only manifest format:
+
+```text
+# @tool example-command
+# @description Brief description of what the command does
+# @usage example-command [options]
+# @example example-command --help
+# @installed-by external (must be installed separately and available in $PATH)
+```
+
+Jippity Doctor will provide a bundled diagnostic command and an optional example manifest in [Issue #8](https://github.com/BDubDesigns/codex-jippity/issues/8).
+
+## Privacy and security
+
+- History, screenshots, responses, and logs are stored locally under `~/.local/share/jippity/`.
+- Configuration and state are stored under `~/.config/jippity/`.
+- Prompts and attached screenshots are passed through the Codex CLI and are subject to your Codex/OpenAI configuration and policies.
+- Whisper transcription runs locally when whisper.cpp is used.
+- The unsandboxed execution option grants Codex-invoked commands broad access as your current user, including local files and the network. It should normally remain disabled.
+- Avoid capturing or submitting sensitive information you do not intend to send through Codex.
+- Saved local history may itself contain sensitive prompts, answers, or screenshots.
 
 ## Scripts
 
 | Script | Purpose |
 |--------|---------|
-| `jippity` | Shared core: `jippity --mode <region\|screen\|window\|quick>` · `jippity --history` · `jippity --voice` |
-| `jippity-window` | Wrapper → `jippity --mode window` |
-| `jippity-screen` | Wrapper → `jippity --mode screen` |
-| `jippity-region` | Wrapper → `jippity --mode region` |
-| `jippity-quick` | Wrapper → `jippity --mode quick` |
-| `jippity-prompt` | PyQt6 helper: prompt input + continue-thread checkbox + (optional) hold-to-talk voice |
-| `jippity-history` | PyQt6 helper: browse/search/delete threads, set active thread |
-| `jippity-setup` | Create dirs, print KDE hotkey instructions |
-
-## How it works
-
-- Jippity owns hotkeys, screenshots, prompt input, output display, history storage, and voice capture.
-- Codex owns the model, reasoning, and auth.
-- All `codex exec` calls use `--ephemeral` to avoid polluting codex's session store.
-- Thread continuity is handled locally: Jippity reconstructs prior conversation from `history.jsonl` and prepends it to the new prompt. No dependency on codex's session store — works even if codex clears sessions.
-- History is stored as JSONL under `~/.local/share/jippity/` (`screenshots/`, `responses/`, `logs/`, `history.jsonl`).
-- State lives at `~/.config/jippity/state` (`THREAD_ID`, `LAST_MODE`, `CONTINUE_DEFAULT`, `VOICE_ENABLED`).
-
-## Implementation philosophy
-
-Start tiny. Prefer boring Linux tools before building custom infrastructure. Avoid agent-framework complexity until the workflow proves it deserves it.
+| `jippity` | Shared core: `jippity --mode <region\|screen\|window\|quick>`, `--history`, `--voice` |
+| `jippity-window` | Wrapper for window capture |
+| `jippity-screen` | Wrapper for screen capture |
+| `jippity-region` | Wrapper for region capture |
+| `jippity-quick` | Wrapper for text-only prompts |
+| `jippity-prompt` | PyQt6 prompt helper, with optional voice input |
+| `jippity-history` | PyQt6 history viewer |
+| `jippity-setup` | Creates directories and prints shortcut instructions |
+| `jippity-tools` | Reads active tool manifests from `tools/` |
 
 ## License
 
-MIT — see `LICENSE` if present.
-
-## Repo
-
-https://github.com/BDubDesigns/codex-jippity
+[MIT License](LICENSE)

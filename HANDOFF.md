@@ -30,7 +30,7 @@ Toolbar removed:
 - **Spectacle noise suppressed.** Stderr redirected to `/dev/null` to hide Tesseract library warnings.
 - **Notification popup.** `kdialog --passivepopup "Jippity response ready" 3` after each completion.
 - **No streaming.** Blocks for full response. Streaming possible later.
-- **Tools.** A `tools/` subdirectory in the repo holds tool manifests — small files with `# @tool` front-matter (`@tool`, `@description`, `@usage`, `@example`, `@installed-by`). `jippity-tools` scans the dir and prepends an `[Available jippity tools]` index block to the context sent to codex; the history viewer's "Tools…" button shows the same index via `jippity-tools --json`. External tools already in `$PATH` (like `codex-reset`) are documented via stub manifests; bundled tools are real executable scripts placed in `tools/`.
+- **Tools.** Active manifests in `tools/` use `# @tool` front-matter (`@tool`, `@description`, `@usage`, `@example`, `@installed-by`). `jippity-tools` scans them and prepends an `[Available jippity tools]` index block to Codex context; the history viewer's "Tools…" button shows the same index via `jippity-tools --json`. A manifest does not install a command; external commands must be available in `$PATH`. Active tools expose a per-prompt, default-off unsandboxed execution option.
 
 ### What was validated
 
@@ -45,7 +45,7 @@ Toolbar removed:
 ### What didn't work
 
 - **Always-on-top for response window.** Tried KWin scripting via qdbus6. Script loaded without errors but had no visible effect on Wayland. Deferred — a future tray app (Phase 7) could focus the response window instead.
-- **yad as the prompt-dialog tool.** yad's `webkit2gtk-4.1` dep is 133 MiB and the CachyOS v3 mirrors were 404-ing on multiple transitive deps. Replaced with PyQt6 (already installed via KDE Plasma) — zero new deps and a native Qt look.
+- **yad as the prompt-dialog tool.** yad's `webkit2gtk-4.1` dep is 133 MiB and the CachyOS v3 mirrors were 404-ing on multiple transitive deps. Replaced with PyQt6 for a native Qt look; PyQt6 may need to be installed separately depending on the distribution.
 - **System tray as a standalone Phase 5.** Hotkeys already cover every invocation; the tray would only add at-a-glance status and response-flash. Not worth a dedicated phase. Folded into Phase 7 (rich GUI) where it belongs alongside the larger frontend.
 
 ## Session Resume Design (Phase 3 — done)
@@ -81,7 +81,7 @@ Benefits:
 
 ## Voice Input (Phase 6 — done)
 
-Hold-to-talk transcription wired into `jippity-prompt`. No new Python deps; uses `parecord` (PipeWire, already installed) for capture and `whisper-cli` (whisper.cpp, AUR) for transcription.
+Hold-to-talk transcription wired into `jippity-prompt`. No new Python deps; it uses `parecord` (or a PipeWire/PulseAudio compatibility package) for capture and `whisper-cli` from whisper.cpp for transcription. These voice dependencies may need to be installed separately.
 
 1. **State file** gains `VOICE_ENABLED` (default false). Persisted across runs in `~/.config/jippity/state`.
 2. **`jippity-prompt`** reads voice_enabled (6th CLI arg). When true and `whisper-cli` + model are found, adds a "Hold to Talk" button and installs an app-wide event filter for Alt-hold.

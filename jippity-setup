@@ -26,12 +26,17 @@ Jippity directories created:
   History: $HISTORY_DIR
   State:   $CONFIG_DIR/state
 
-Dependencies:
-  - kdialog, spectacle, jq, parecord: already in your KDE install
-  - PyQt6 (optional): enables a combined input + continue-thread checkbox dialog.
-    Already installed on KDE Plasma systems. Fall back is a two-step kdialog flow.
-  - Voice input (optional, off by default):
-      Install: paru -S whisper.cpp whisper.cpp-model-small.en
+Dependencies (setup creates directories; it does not install packages):
+  - Required: codex, spectacle, kdialog, jq, Python 3, and standard Unix
+    commands used by Jippity.
+    Some may already be installed depending on your distribution and KDE setup.
+  - Recommended: PyQt6 enables a combined input + continue-thread checkbox
+    dialog and the history viewer.
+    It may already be installed depending on your distribution. Without it,
+    Jippity falls back to a two-step kdialog flow.
+  - Optional voice input (off by default): parecord (or your PipeWire/PulseAudio
+    compatibility package), whisper.cpp, and a compatible Whisper model.
+    Arch/CachyOS example: paru -S whisper.cpp whisper.cpp-model-small.en
       Enable:  $SCRIPT_DIR/jippity --voice
       Use:     hold Alt (or the on-screen "Hold to Talk" button) while the
                prompt dialog is open. Release to transcribe into the box.
@@ -40,7 +45,7 @@ Dependencies:
 To bind KDE global shortcuts:
 
   1. Open System Settings > Shortcuts > Custom Shortcuts
-  2. Add four new shortcuts:
+  2. Add these shortcuts:
 
      Trigger: Super+S
      Action: Command/URL: $SCRIPT_DIR/jippity --mode region
@@ -57,9 +62,13 @@ To bind KDE global shortcuts:
      Trigger: Super+H
      Action: Command/URL: $SCRIPT_DIR/jippity --history
 
+     Trigger: Super+V
+     Action: Command/URL: $SCRIPT_DIR/jippity --voice
+
 Commands:
   $SCRIPT_DIR/jippity --mode <region|screen|window|quick>   Ask a question
   $SCRIPT_DIR/jippity --history                             Browse/search/delete threads, set active
+  $SCRIPT_DIR/jippity --voice                               Toggle optional voice input
 
 Continue-thread flow:
   - When a thread exists, the dialog shows a "Continue thread" checkbox

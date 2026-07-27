@@ -1,150 +1,225 @@
+<div align="center">
+
 # Jippity
 
-Jippity is a lightweight KDE Plasma and Wayland hotkey frontend for the [Codex CLI](https://github.com/openai/codex). Capture a region, window, or screen; ask a question; and receive the answer in a popup without interrupting your desktop workflow. It supports region, window, full-screen, and text-only prompts, plus local conversation threads with searchable history and the option to continue a previous thread. Optional Whisper transcription runs locally.
+**Point at something on your desktop. Ask Codex about it. Keep moving.**
 
-It is implemented with shell and Python/PyQt6, with no daemon and no build system.
+A lightweight KDE Plasma and Wayland frontend for the [Codex CLI](https://github.com/openai/codex): capture what you see, ask a question, and get the response in a desktop popup.
 
-> **Current platform scope:** Jippity is Linux-only, designed for KDE Plasma on Wayland, and tested on CachyOS/Arch Linux. It has not yet been broadly tested or supported across other distributions or desktop environments.
+![Linux](https://img.shields.io/badge/Linux-1f6feb?style=flat-square&logo=linux&logoColor=white)
+![KDE Plasma](https://img.shields.io/badge/KDE%20Plasma-1d99f3?style=flat-square&logo=kde&logoColor=white)
+![Wayland](https://img.shields.io/badge/Wayland-4e5d6c?style=flat-square)
+![Shell + Python](https://img.shields.io/badge/Shell%20%2B%20Python-3b4252?style=flat-square&logo=python&logoColor=white)
+![MIT License](https://img.shields.io/badge/License-MIT-2da44e?style=flat-square)
 
-<!-- Add a real screen recording or GIF here when one is available. -->
+</div>
 
-## Why I built this
+<!--
+<p align="center">
+  <img src="docs/jippity-demo.gif" alt="Jippity capturing a desktop region, accepting a question, and showing the Codex response" width="900">
+</p>
+-->
 
-I wanted to ask Codex about something visible on my desktop without opening a terminal, manually creating or locating a screenshot, attaching it separately, and breaking my current workflow. Jippity keeps that flow to a hotkey, a capture when needed, and a question.
+Jippity is a thin desktop UX layer, not a new model or agent framework. The Codex CLI still owns authentication, model access, and model execution. Jippity handles the hotkeys, screenshots, prompt window, local thread history, and desktop response.
 
-## Install and setup
+## Why Jippity?
 
-Clone the repository, enter it, and run setup:
+It started with a small friction point: asking Codex about something already visible on the desktop meant opening a terminal, making or finding a screenshot, attaching it, and breaking the flow. Jippity reduces that to a hotkey, an optional capture, and a question.
+
+## What Jippity Can Do
+
+| Area | What ships today |
+|---|---|
+| **Capture and ask** | Select a region, capture the active window or full screen, or send a text-only quick prompt. Screenshot cancellation and capture errors are handled before a request is sent. |
+| **Desktop flow** | Bind suggested KDE global shortcuts, get a response-ready notification, then read the answer in a dynamically sized desktop popup. |
+| **Prompt experience** | Use an always-on-top native PyQt6 prompt when available, press Enter to send, continue a prior thread, and keep the continuation preference for the next prompt. Ordinary prompts fall back to a two-step KDialog flow without PyQt6. |
+| **Local threads** | Start fresh threads, reconstruct earlier context locally, search prompts and responses, read transcripts, see timestamps/exchange counts/modes, set an older thread active, and delete threads with their stored screenshots. |
+| **Optional voice** | Hold Alt or the on-screen button to record with `parecord`; whisper.cpp inserts a local transcription at the cursor for editing before you send it. |
+| **Custom tools** | Opt in to tool manifests that teach Codex about commands you already have. Unsandboxed execution stays off by default and requires approval for each prompt. |
+| **Jippity Doctor** | Run local, read-only diagnostics for the platform, dependencies, voice support, files, state locations, history access, and active manifests. |
+
+## The Flow
+
+```mermaid
+flowchart TD
+    H[Global hotkey] --> M{Capture mode or quick prompt}
+    M --> P["Prompt window<br/>optional local voice input"]
+    P --> T{Continue a previous thread?}
+    T --> C[Codex CLI ephemeral request]
+    A["Active tool manifests<br/>optional context"] -.-> C
+    C --> R[Local history and desktop response]
+```
+
+## Quick Start
 
 ```bash
 git clone https://github.com/BDubDesigns/codex-jippity.git
 cd codex-jippity
 ./jippity-setup
+./jippity-doctor
 ```
 
-The setup script creates Jippity's local directories and prints KDE global-shortcut binding instructions. Install any missing dependencies first, then bind the commands in KDE System Settings to the full path of the `jippity` script.
+`jippity-setup` creates Jippity's local directories and prints KDE shortcut instructions. It does **not** install packages. Install any missing dependencies yourself, then point KDE shortcuts at the absolute path of the relevant command. Run Jippity Doctor to see what is missing before troubleshooting by hand.
 
-### Required
+## Suggested Hotkeys
+
+These bindings are suggestions, not automatic installs. Add them in **KDE System Settings > Shortcuts > Custom Shortcuts**.
+
+| Shortcut | Command | Use it for |
+|---|---|---|
+| Super+S | `/path/to/codex-jippity/jippity --mode region` | Select part of the screen, then ask |
+| Super+W | `/path/to/codex-jippity/jippity --mode screen` | Ask about the full screen |
+| Super+A | `/path/to/codex-jippity/jippity --mode window` | Ask about the active window |
+| Super+Q | `/path/to/codex-jippity/jippity --mode quick` | Ask a text-only question |
+| Super+H | `/path/to/codex-jippity/jippity --history` | Browse, search, manage, or continue threads |
+| Super+V | `/path/to/codex-jippity/jippity --voice` | Toggle optional voice input |
+
+### Direct Commands
+
+```bash
+./jippity --mode region
+./jippity --mode window
+./jippity --mode screen
+./jippity --mode quick
+./jippity --history
+./jippity --voice
+./jippity-doctor
+./jippity-doctor --json
+./jippity-tools --list
+./jippity-tools --json
+```
+
+## Good Fits for Jippity
+
+- Capture an error dialog and ask what it means.
+- Select part of an application and ask how to use it.
+- Capture a terminal failure and ask for the next debugging step.
+- Ask a quick text-only question without opening a terminal first.
+- Continue a troubleshooting thread from earlier in the day.
+- Dictate a prompt while staying in the current desktop workflow.
+- Run Jippity Doctor, then let Codex summarize its findings through the opt-in doctor manifest.
+
+These are workflow examples, not a guarantee that any model answer is correct. Review advice before applying it.
+
+## Threads and History
+
+Every fresh conversation gets a local thread ID. When you choose **Continue previous thread**, Jippity reconstructs prior prompts and responses from local JSONL history and prepends that context to the next request. It does not depend on Codex's saved session store.
+
+The graphical history viewer lets you search prompts and responses, read complete transcripts, inspect modes/timestamps/exchange counts, identify the active thread, set an older thread active, and multi-select threads for deletion. Deleting a thread also removes its associated stored screenshots. The graphical history viewer requires PyQt6; there is no KDialog history fallback.
+
+## Voice Input, Locally
+
+Voice is optional and disabled by default. With `parecord`, whisper.cpp, and a compatible model available:
+
+1. Turn it on with `./jippity --voice`.
+2. Hold Alt or the on-screen **Hold to Talk** button while the prompt is open.
+3. Release to transcribe locally.
+4. Edit the inserted text, then send it when you are ready.
+
+Nothing auto-submits. Missing voice dependencies do not block normal text prompting.
+
+## Custom Codex Tools
+
+Custom tools are optional. They are a way to give Codex instructions for using commands on your machine, not a requirement for ordinary Jippity use.
+
+- Active tool manifests live in `tools/`; examples live outside active discovery in `examples/tools/`.
+- A tool manifest teaches Codex about a command. It does not install or implement that command.
+- External commands must already be installed and available in `$PATH`.
+- Bundled commands can be resolved independently of the current working directory.
+- `@command` defines the invocation; repeatable `@instruction` entries give Codex behavioral guidance.
+- `./jippity-tools`, `--list`, and `--json` expose active manifests. The graphical history viewer can show them too.
+- The per-prompt unsandboxed-execution option appears only when active tools exist. It is never enabled automatically.
+
+The bundled Doctor executable ships with Jippity, but its teaching manifest remains inactive until you choose to enable it:
+
+```bash
+cp examples/tools/jippity-doctor tools/jippity-doctor
+```
+
+This copies metadata only. It does not install a command. The Doctor manifest does not need networking or unsandboxed execution.
+
+## Jippity Doctor
+
+Run `./jippity-doctor` for a concise human report, or `./jippity-doctor --json` for the `jippity-doctor/v1` structured report with stable check IDs.
+
+| Exit code | Meaning |
+|---|---|
+| `0` | Required runtime checks pass; recommended or optional checks may still warn. |
+| `1` | At least one required runtime check failed. |
+| `2` | Invalid command-line usage. |
+
+Doctor checks Linux/platform signals, required dependencies, PyQt6, optional voice components, bundled script permissions, state and history locations, and active tool manifests. It is local and read-only: no support bundle upload, no automatic repair, no model/API request, and no `danger-full-access`. It may run `codex --version` locally. Home-directory paths are sanitized in its output.
+
+## Dependencies
+
+Some dependencies may already be present depending on your distribution and KDE setup.
+
+<details>
+<summary><strong>Required</strong></summary>
 
 - Codex CLI (`codex`)
 - Spectacle (`spectacle`)
 - KDialog (`kdialog`)
 - `jq`
 - Python 3
-- Standard Unix commands used by the scripts, including `bash`, `cat`, `date`, `fold`, `grep`, `mkdir`, `mktemp`, `rm`, and `tr`
+- Standard Unix commands used by the scripts, including `bash`, `cat`, `date`, `dirname`, `fold`, `grep`, `mkdir`, `mktemp`, `pwd`, `rm`, `tr`, and `wc`
 
-Some dependencies may already be installed depending on your distribution. KDE Plasma installations do not necessarily include every dependency above.
+</details>
 
-### Recommended
+<details>
+<summary><strong>Recommended: PyQt6</strong></summary>
 
-- PyQt6, for the combined native prompt dialog and graphical history viewer. Without it, ordinary prompts fall back to a two-step KDialog flow, and `jippity --history` / Super+H is unavailable.
+PyQt6 provides the combined prompt dialog and is required for the graphical history viewer. Without it, ordinary prompts use the two-step KDialog fallback and `jippity --history` is unavailable.
 
-### Optional voice input
+</details>
 
-- `parecord`, or the applicable PipeWire/PulseAudio compatibility package
+<details>
+<summary><strong>Optional voice input</strong></summary>
+
+- `parecord`, or the appropriate PipeWire/PulseAudio compatibility package
 - whisper.cpp
 - A compatible Whisper model
 
-For CachyOS/Arch Linux, for example:
+CachyOS/Arch example:
 
 ```bash
 paru -S whisper.cpp whisper.cpp-model-small.en
 ```
 
-Then enable voice input:
+</details>
 
-```bash
-./jippity --voice
-```
+## Privacy and Local Data
 
-Voice input is off by default. When enabled and the dependencies are available, hold Alt or the on-screen button while the prompt is open, then release to transcribe locally into the prompt.
+- Configuration and state live under `~/.config/jippity/`.
+- History, screenshots, responses, and logs live under `~/.local/share/jippity/`.
+- Prompts and selected screenshots are passed to the Codex CLI, subject to your Codex/OpenAI configuration and applicable policies.
+- Saved local history can itself contain sensitive prompts, answers, and screenshots.
+- whisper.cpp transcription runs locally when used.
+- Jippity Doctor is local and read-only.
+- Tool manifests may teach Codex to run local commands. Review them before activation.
+- Unsandboxed execution gives Codex-invoked commands broad local-file and network access as your user. Leave it off unless a trusted tool truly requires it.
 
-## Hotkeys
+## Under the Hood
 
-| Key | Command | Action |
-|-----|---------|--------|
-| Super+S | `jippity --mode region` | Select region, then ask Codex |
-| Super+W | `jippity --mode screen` | Capture full screen, then ask Codex |
-| Super+A | `jippity --mode window` | Capture active window, then ask Codex |
-| Super+Q | `jippity --mode quick` | Text-only prompt |
-| Super+H | `jippity --history` | Browse, search, delete, or continue threads |
-| Super+V | `jippity --voice` | Toggle optional voice input |
+<details>
+<summary>Small pieces, deliberately</summary>
 
-Bind them in KDE System Settings > Shortcuts > Custom Shortcuts.
+- Shell scripts orchestrate capture, prompt flow, persistence, and display.
+- Small PyQt6 helpers provide the combined prompt dialog and graphical history viewer.
+- Spectacle captures images; KDialog handles fallback prompts, notifications, and response display.
+- Requests use `codex exec --ephemeral`.
+- Local JSONL history reconstructs conversation context instead of relying on Codex session storage.
+- whisper.cpp is an optional local transcription path.
+- Jippity Doctor uses only the Python standard library for diagnostics.
+- There is no daemon and no build system.
 
-## What it does
+</details>
 
-- Captures a selected region, active window, or full screen, or accepts a text-only prompt.
-- Shows the Codex answer in a popup and stores local transcripts.
-- Lets you continue a previous thread, browse history, search prompts and responses, delete threads, and set an active thread.
-- Uses local history reconstruction for thread continuity rather than Codex session storage.
-- Uses `codex exec --ephemeral` for each request.
+## Platform Status and Roadmap
 
-## Status and roadmap
+Jippity is Linux-only, designed for KDE Plasma on Wayland, and tested on CachyOS/Arch Linux. Other distributions and desktop environments are not broadly tested.
 
-Core screenshot and text prompt flows work, as do local thread continuation and searchable history. Voice input is implemented. A richer GUI and tray are future work, not a requirement for using the current application.
-
-## Jippity Doctor
-
-Run the bundled diagnostic directly from any directory:
-
-```bash
-/path/to/codex-jippity/jippity-doctor
-/path/to/codex-jippity/jippity-doctor --json
-```
-
-It checks the platform, required and recommended dependencies, optional voice support, bundled scripts, and active tool manifests. `--json` emits only the simple `jippity-doctor/v1` report with an overall result and stable check IDs. It is local and read-only: it does not access the network, start a Codex conversation, make a model/API request, read history contents, change configuration, or repair anything. It may run `codex --version` locally to report the installed version. It never uses `danger-full-access` or uploads a support report. It exits `0` when required checks pass (warnings are allowed), `1` for required runtime failures, and `2` for invalid usage.
-
-## Custom tools
-
-Custom tools are an advanced feature. Active manifests live in `tools/`. A manifest teaches Codex about a command; it does not install or implement that command. External commands must already be installed and available in `$PATH`. Bundled tools would include both a real executable command and an associated manifest.
-
-Review a command before teaching Codex to invoke it. Adding active tools may expose the per-prompt **Run Codex without sandboxing** option; treat tools that require unsandboxed execution cautiously.
-
-Documentation-only manifest format:
-
-```text
-# @tool example-command
-# @description Brief description of what the command does
-# @command example-command
-# @usage example-command [options]
-# @example example-command --help
-# @instruction Guidance for Codex (repeatable)
-# @installed-by external (must be installed separately and available in $PATH)
-```
-
-`@command` is optional for compatibility with existing manifests. It is the command Codex should invoke; without it, the tool name remains the command. The bundled doctor command ships with Jippity, but its teaching manifest is inactive by default. To let Codex use it, explicitly activate the example:
-
-```bash
-cp examples/tools/jippity-doctor tools/jippity-doctor
-```
-
-This copies only metadata and does not install a command. The doctor needs neither network access nor sandbox bypass.
-
-## Privacy and security
-
-- History, screenshots, responses, and logs are stored locally under `~/.local/share/jippity/`.
-- Configuration and state are stored under `~/.config/jippity/`.
-- Prompts and attached screenshots are passed through the Codex CLI and are subject to your Codex/OpenAI configuration and policies.
-- Whisper transcription runs locally when whisper.cpp is used.
-- The unsandboxed execution option grants Codex-invoked commands broad access as your current user, including local files and the network. It should normally remain disabled.
-- Avoid capturing or submitting sensitive information you do not intend to send through Codex.
-- Saved local history may itself contain sensitive prompts, answers, or screenshots.
-
-## Scripts
-
-| Script | Purpose |
-|--------|---------|
-| `jippity` | Shared core: `jippity --mode <region\|screen\|window\|quick>`, `--history`, `--voice` |
-| `jippity-window` | Wrapper for window capture |
-| `jippity-screen` | Wrapper for screen capture |
-| `jippity-region` | Wrapper for region capture |
-| `jippity-quick` | Wrapper for text-only prompts |
-| `jippity-prompt` | PyQt6 prompt helper, with optional voice input |
-| `jippity-history` | PyQt6 history viewer |
-| `jippity-setup` | Creates directories and prints shortcut instructions |
-| `jippity-tools` | Reads active tool manifests from `tools/` |
-| `jippity-doctor` | Read-only local installation diagnostics (`--json` available) |
+Core capture, prompt, local history, voice, tools, and diagnostics flows are implemented. A richer GUI or tray remains future work. Jippity is a personal open-source project, not an official OpenAI product.
 
 ## License
 

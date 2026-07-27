@@ -10,8 +10,8 @@ Alt-hold to start audio capture. On release, transcribes via whisper.cpp
 and inserts the result at the cursor position (no auto-submit — user can
 edit before pressing Enter).
 
-When has_tools is "1", shows an "Allow network access (disable sandbox)"
-checkbox. Always defaults to off — user must explicitly opt in per prompt.
+When has_tools is "1", shows a "Run Codex without sandboxing" checkbox.
+It always defaults to off; users must explicitly opt in for each prompt.
 """
 import json
 import os
@@ -109,13 +109,13 @@ def main():
     chk.setEnabled(has_thread)
     layout.addWidget(chk)
 
-    bypass_chk = QCheckBox("Allow network access (disable sandbox)")
+    bypass_chk = QCheckBox("Run Codex without sandboxing")
     bypass_chk.setChecked(False)
     bypass_chk.setEnabled(has_tools)
     bypass_chk.setToolTip(
-        "When checked, codex runs without its sandbox so model-invoked "
-        "shell commands (like codex-reset) can reach the network. Off by "
-        "default each run — you must opt in per prompt."
+        "When checked, Codex-invoked commands run unsandboxed as your current "
+        "user, with access to local files and the network. This is off by "
+        "default and requires opt-in for each prompt."
     )
     layout.addWidget(bypass_chk)
 

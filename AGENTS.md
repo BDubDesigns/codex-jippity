@@ -2,11 +2,11 @@
 
 ## What this is
 
-A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex). Press a hotkey → (optional screenshot) → type prompt → Codex answers. Shell scripts, no build system or language runtime.
+A Linux-only KDE Plasma/Wayland hotkey frontend for [Codex CLI](https://github.com/openai/codex). It captures an optional screenshot or accepts a text-only prompt, then shows Codex's answer in a popup. Shell and Python/PyQt6, with no daemon or build system.
 
 ## Current state
 
-**Phases 0–4.6 + voice input (Phase 6) + tools implemented.** Code exists, tested on this machine.
+**Phases 0–4.6 + voice input (Phase 6) + tools implemented.** Tested on CachyOS/Arch with KDE Plasma on Wayland; other distributions and desktop environments are not broadly supported or tested.
 
 | Script | Purpose |
 |--------|---------|
@@ -23,8 +23,8 @@ A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex
 ## Key design facts
 
 - **Core principle:** thin UX layer over `codex` CLI. Jippity owns hotkeys, screenshots, prompt input, output display. Codex owns model, reasoning, auth.
-- **Target platform:** Linux + KDE Plasma + Wayland + CachyOS/Arch + fish shell.
-- **External deps:** `codex`, `spectacle`, `kdialog`, `jq`, standard Unix tools, KDE global shortcuts.
+- **Target platform:** Linux + KDE Plasma + Wayland; tested on CachyOS/Arch. Do not assume other distributions or desktop environments work.
+- **External deps:** `codex`, `spectacle`, `kdialog`, `jq`, Python 3, standard Unix tools, and KDE global shortcuts. PyQt6 is recommended; `parecord`, whisper.cpp, and a model are optional for voice input.
 - **Config / state:** `~/.config/jippity/state` (THREAD_ID, LAST_MODE, CONTINUE_DEFAULT, VOICE_ENABLED)
 - **History:** `~/.local/share/jippity/` with `screenshots/`, `responses/`, `logs/`, `history.jsonl`
 
@@ -41,7 +41,7 @@ A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex
 - **Dynamic dialog sizing** — `fold -w 80` for visual line estimate, `height = lines × 22px + 100px`, clamped 120–800px.
 - **Spectacle noise suppressed** — stderr to `/dev/null`.
 - **Notification** — `kdialog --passivepopup` after each response.
-- **Tools** — a `tools/` subdirectory in the repo holds tool manifests (small files with `# @tool` front-matter). `jippity-tools` scans this dir and prepends an `[Available jippity tools]` index block to the context sent to codex. Codex can then invoke the tools via its shell. The history viewer's "Tools…" button shows the same index. External tools already in `$PATH` (like `codex-reset`) are documented via stub manifests; bundled tools are real executable scripts placed in `tools/`.
+- **Tools** — active manifests in `tools/` (small files with `# @tool` front-matter) are scanned by `jippity-tools` and prepended as an index block to Codex context. Examples belong in `examples/tools/` and are inactive. A manifest does not install its command; external commands must be in `$PATH`. Active tools expose a per-prompt, default-off unsandboxed execution option.
 
 ## Development roadmap
 
@@ -60,11 +60,7 @@ A Linux desktop assistant that wraps [Codex CLI](https://github.com/openai/codex
 
 ## Tools
 
-A `tools/` subdirectory in the repo holds tool manifests — small files with `# @tool` front-matter describing a tool codex can invoke.
-
-| Tool | Status |
-|------|--------|
-| `codex-reset` | Stub manifest (external — already in `$PATH` on this machine) |
+Active manifests in `tools/` describe commands Codex can invoke. The directory is empty by default. Inactive examples are in `examples/tools/`; copy or create a manifest in `tools/` only after separately installing its command and ensuring it is in `$PATH`.
 
 Tool file format:
 

@@ -27,11 +27,16 @@ Jippity directories created:
   State:   $CONFIG_DIR/state
 
 Dependencies:
-  - kdialog, spectacle, jq, parecord: already in your KDE install
+  - Required: codex, spectacle, kdialog, jq, Python 3, and standard Unix tools.
+    Some may already be installed depending on your distribution; install any
+    that are missing before using Jippity.
   - PyQt6 (optional): enables a combined input + continue-thread checkbox dialog.
-    Already installed on KDE Plasma systems. Fall back is a two-step kdialog flow.
+    It may already be installed depending on your distribution. Without it,
+    Jippity falls back to a two-step kdialog flow.
   - Voice input (optional, off by default):
-      Install: paru -S whisper.cpp whisper.cpp-model-small.en
+       Requires parecord (or your PipeWire/PulseAudio compatibility package),
+       whisper.cpp, and a compatible Whisper model.
+       Arch/CachyOS example: paru -S whisper.cpp whisper.cpp-model-small.en
       Enable:  $SCRIPT_DIR/jippity --voice
       Use:     hold Alt (or the on-screen "Hold to Talk" button) while the
                prompt dialog is open. Release to transcribe into the box.

@@ -43,10 +43,10 @@ It started with a small friction point: asking Codex about something already vis
 ```mermaid
 flowchart TD
     H[Global hotkey] --> M{Capture mode or quick prompt}
-    M --> P[Prompt window\noptional local voice input]
+    M --> P["Prompt window<br/>optional local voice input"]
     P --> T{Continue a previous thread?}
     T --> C[Codex CLI ephemeral request]
-    A[Active tool manifests\noptional context] -.-> C
+    A["Active tool manifests<br/>optional context"] -.-> C
     C --> R[Local history and desktop response]
 ```
 
@@ -67,12 +67,12 @@ These bindings are suggestions, not automatic installs. Add them in **KDE System
 
 | Shortcut | Command | Use it for |
 |---|---|---|
-| Super+S | `jippity --mode region` | Select part of the screen, then ask |
-| Super+W | `jippity --mode screen` | Ask about the full screen |
-| Super+A | `jippity --mode window` | Ask about the active window |
-| Super+Q | `jippity --mode quick` | Ask a text-only question |
-| Super+H | `jippity --history` | Browse, search, manage, or continue threads |
-| Super+V | `jippity --voice` | Toggle optional voice input |
+| Super+S | `/path/to/codex-jippity/jippity --mode region` | Select part of the screen, then ask |
+| Super+W | `/path/to/codex-jippity/jippity --mode screen` | Ask about the full screen |
+| Super+A | `/path/to/codex-jippity/jippity --mode window` | Ask about the active window |
+| Super+Q | `/path/to/codex-jippity/jippity --mode quick` | Ask a text-only question |
+| Super+H | `/path/to/codex-jippity/jippity --history` | Browse, search, manage, or continue threads |
+| Super+V | `/path/to/codex-jippity/jippity --voice` | Toggle optional voice input |
 
 ### Direct Commands
 

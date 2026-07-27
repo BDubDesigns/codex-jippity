@@ -35,6 +35,16 @@ def parse_tool(path):
     return parse_manifest(path)
 
 
+def shell_command_path(path):
+    """Return a shell-safe path without exposing a home-relative install path."""
+    home = os.path.abspath(os.path.expanduser("~"))
+    path = os.path.abspath(path)
+    if path.startswith(home + os.sep):
+        relative = os.path.relpath(path, home)
+        return '"${HOME}"/' + shlex.quote(relative)
+    return shlex.quote(path)
+
+
 def load_tools():
     d = tools_dir()
     if not os.path.isdir(d):
@@ -58,7 +68,7 @@ def load_tools():
                     parts = []
                 bundled = os.path.join(os.path.dirname(os.path.abspath(__file__)), parts[0]) if parts else ""
                 if bundled and os.path.isfile(bundled) and os.access(bundled, os.X_OK):
-                    t["command"] = " ".join([shlex.quote(bundled)] + [shlex.quote(p) for p in parts[1:]])
+                    t["command"] = " ".join([shell_command_path(bundled)] + [shlex.quote(p) for p in parts[1:]])
             tools.append(t)
     return tools
 

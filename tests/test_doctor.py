@@ -42,6 +42,8 @@ class DoctorTests(unittest.TestCase):
         body = "#!/bin/sh\n"
         if name == "codex":
             body += "[ \"$1\" = --version ] && printf 'codex test-version\\n'\n"
+        elif name == "python3":
+            body += f'exec "{sys.executable}" "$@"\n'
         path = self.bin / name
         path.write_text(body, encoding="utf-8")
         path.chmod(0o755)
@@ -163,8 +165,8 @@ class DoctorTests(unittest.TestCase):
 
     def test_examples_are_inactive_and_activated_command_works_outside_repo(self):
         self.assertEqual(subprocess.run([sys.executable, str(ROOT / "jippity-tools"), "--list"],
-                                        text=True, capture_output=True, check=False).stdout, "")
-        install = self.base / "install"
+                                        env=self.env, text=True, capture_output=True, check=False).stdout, "")
+        install = self.home / "install directory"
         (install / "tools").mkdir(parents=True)
         for name in ("jippity", "jippity-window", "jippity-screen", "jippity-region",
                      "jippity-quick", "jippity-prompt", "jippity-history", "jippity-setup",
@@ -176,29 +178,37 @@ class DoctorTests(unittest.TestCase):
         shutil.copy2(ROOT / "examples/tools/jippity-doctor", install / "tools/jippity-doctor")
         manifest_before = (install / "tools/jippity-doctor").read_bytes()
         listed = subprocess.run([sys.executable, str(install / "jippity-tools"), "--list"],
-                                cwd=self.base, text=True, capture_output=True, check=False)
+                                cwd=self.base, env=self.env, text=True, capture_output=True, check=False)
         self.assertEqual(listed.stdout.strip(), "jippity-doctor")
         block = subprocess.run([sys.executable, str(install / "jippity-tools")], cwd=self.base,
-                               text=True, capture_output=True, check=False).stdout
+                               env=self.env, text=True, capture_output=True, check=False).stdout
         tool_json = subprocess.run([sys.executable, str(install / "jippity-tools"), "--json"],
-                                   cwd=self.base, text=True, capture_output=True, check=False).stdout
+                                   cwd=self.base, env=self.env, text=True, capture_output=True, check=False).stdout
         instructions = json.loads(tool_json)[0]["instruction"]
         self.assertEqual(len(instructions), 5)
-        self.assertIn(str(install / "jippity-doctor"), block)
+        advertised_command = json.loads(tool_json)[0]["command"]
+        self.assertIn("${HOME}", advertised_command)
+        self.assertNotIn(str(self.home), block)
+        self.assertNotIn(str(self.home), advertised_command)
         self.assertIn("Use the default human-readable report for ordinary troubleshooting.", block)
         self.assertIn("Prefer --json when structured inspection helps.", block)
         self.assertIn("Summarize findings and recommended fixes instead of dumping raw JSON.", block)
         self.assertIn("The doctor diagnoses only and never repairs the system.", block)
         self.assertIn("It requires neither networking nor sandbox bypass.", block)
+        invocation = subprocess.run(advertised_command + " --json", shell=True,
+                                    cwd=self.base, env=self.env, text=True,
+                                    capture_output=True, check=False)
+        self.assertEqual(invocation.returncode, 0, invocation.stderr)
+        self.assertEqual(json.loads(invocation.stdout)["schema"], "jippity-doctor/v1")
         (install / "tools/broken").write_text("# @description missing tool name\n")
         (install / "tools/external-missing").write_text(
             "# @tool external-missing\n# @command external-missing\n"
             "# @installed-by external\n"
         )
-        invocation = subprocess.run([sys.executable, str(install / "jippity-doctor"), "--json"],
-                                    cwd=self.base, env=self.env, text=True, capture_output=True, check=False)
-        self.assertEqual(invocation.returncode, 0)
-        checks = {item["id"]: item for item in json.loads(invocation.stdout)["checks"]}
+        doctor_result = subprocess.run([sys.executable, str(install / "jippity-doctor"), "--json"],
+                                       cwd=self.base, env=self.env, text=True, capture_output=True, check=False)
+        self.assertEqual(doctor_result.returncode, 0)
+        checks = {item["id"]: item for item in json.loads(doctor_result.stdout)["checks"]}
         self.assertEqual(checks["tool.broken"]["status"], "WARN")
         self.assertEqual(checks["tool.external-missing"]["status"], "WARN")
         self.assertEqual(manifest_before, (install / "tools/jippity-doctor").read_bytes())
@@ -236,6 +246,10 @@ class DoctorTests(unittest.TestCase):
         absolute.write_text("#!/bin/sh\n", encoding="utf-8")
         absolute.chmod(0o755)
         (tools / "absolute-missing").write_text("# @tool absolute-missing\n# @command /missing/tool\n# @installed-by external\n")
+        missing_home = self.home / "private path" / "missing-tool"
+        (tools / "absolute-home-missing").write_text(
+            f"# @tool absolute-home-missing\n# @command {missing_home}\n# @installed-by external\n"
+        )
         (tools / "absolute-valid").write_text(f"# @tool absolute-valid\n# @command {absolute}\n# @installed-by external\n")
         (tools / "relative-missing").write_text("# @tool relative-missing\n# @command no-such-tool\n# @installed-by external\n")
         (tools / "bundled-valid").write_text("# @tool bundled-valid\n# @command jippity-doctor\n# @installed-by jippity\n")
@@ -250,6 +264,9 @@ class DoctorTests(unittest.TestCase):
             sys.path.pop(0)
         checks = {item["id"]: item for item in doctor.build_report(str(install), self.env)["checks"]}
         self.assertEqual(checks["tool.absolute-missing"]["status"], "WARN")
+        self.assertEqual(checks["tool.absolute-home-missing"]["status"], "WARN")
+        self.assertNotIn(str(self.home), checks["tool.absolute-home-missing"]["message"])
+        self.assertIn("~", checks["tool.absolute-home-missing"]["message"])
         self.assertEqual(checks["tool.absolute-valid"]["status"], "PASS")
         self.assertEqual(checks["tool.relative-missing"]["status"], "WARN")
         self.assertEqual(checks["tool.bundled-valid"]["status"], "PASS")

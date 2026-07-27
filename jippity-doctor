@@ -73,6 +73,7 @@ def check(checks, ident, status, message, fix=""):
 def build_report(script_dir=None, environ=None, platform_name=None):
     env = os.environ if environ is None else environ
     platform_name = sys.platform if platform_name is None else platform_name
+    home = env.get("HOME", os.path.expanduser("~"))
     script_dir = os.path.abspath(script_dir or os.path.dirname(__file__))
     config_base = env.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
     data_base = env.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
@@ -220,7 +221,7 @@ def build_report(script_dir=None, environ=None, platform_name=None):
                 else:
                     available = bool(command(executable))
                 if not available:
-                    check(checks, ident, "WARN", "Tool command is unavailable: " + executable,
+                    check(checks, ident, "WARN", "Tool command is unavailable: " + sanitize(executable, home),
                           "Install it or correct the active manifest.")
                 else:
                     check(checks, ident, "PASS", "Tool manifest is usable: " + manifest["name"])

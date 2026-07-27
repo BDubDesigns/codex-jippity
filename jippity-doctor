@@ -36,8 +36,8 @@ def state_voice_enabled(state_file):
     try:
         with open(state_file, encoding="utf-8") as source:
             for line in source:
-                if line.strip().startswith("VOICE_ENABLED="):
-                    return line.split("=", 1)[1].strip().strip('"') == "true"
+                if line.startswith("VOICE_ENABLED="):
+                    return line.split("=", 1)[1].rstrip("\r\n") == "true"
     except (OSError, UnicodeError):
         return None
     return False
@@ -49,16 +49,16 @@ def state_has_basic_syntax(state_file):
     try:
         with open(state_file, encoding="utf-8") as source:
             for line in source:
-                stripped = line.strip()
+                stripped = line.rstrip("\r\n")
                 if not stripped:
                     continue
                 if "=" not in stripped:
-                    return False
+                    continue
                 key, value = stripped.split("=", 1)
-                if key.strip() not in allowed:
-                    return False
-                if key.strip() in {"CONTINUE_DEFAULT", "VOICE_ENABLED"}:
-                    if value.strip().strip('"') not in {"true", "false"}:
+                if key not in allowed:
+                    continue
+                if key in {"CONTINUE_DEFAULT", "VOICE_ENABLED"}:
+                    if value not in {"true", "false"}:
                         return False
     except (OSError, UnicodeError):
         return False
@@ -122,6 +122,16 @@ def build_report(script_dir=None, environ=None, platform_name=None):
         except (OSError, subprocess.TimeoutExpired):
             version = "unavailable"
         check(checks, "dependency.codex_version", "PASS", "Codex version: " + version)
+        try:
+            auth = subprocess.run([codex, "login", "status"], stdin=subprocess.DEVNULL,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                  timeout=2, check=False)
+            authenticated = auth.returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            authenticated = False
+        check(checks, "dependency.codex_auth", "PASS" if authenticated else "FAIL",
+              "Codex CLI is authenticated" if authenticated else "Codex CLI is not authenticated",
+              "Run codex login to authenticate the Codex CLI." if not authenticated else "")
 
     try:
         __import__("PyQt6")
@@ -267,7 +277,8 @@ Exit codes: 0 when required runtime checks pass; 1 when a required check
 fails; 2 for invalid arguments. The doctor is local and read-only: it does
 not access the network, start a Codex conversation, make a model/API request,
 use danger-full-access, read history contents, or change files. It may run
-codex --version locally to report the installed version.""")
+codex --version and codex login status locally; it never reports authentication
+details, identity, tokens, or command output.""")
         return 0
     if argv not in ([], ["--json"]):
         print("Usage: jippity-doctor [--json|--help]", file=sys.stderr)

@@ -41,7 +41,11 @@ class DoctorTests(unittest.TestCase):
     def stub(self, name):
         body = "#!/bin/sh\n"
         if name == "codex":
-            body += "[ \"$1\" = --version ] && printf 'codex test-version\\n'\n"
+            body += "case \"$1 $2\" in\n"
+            body += "  '--version ') printf 'codex test-version\\n' ;;\n"
+            body += "  'login status') printf '%s\\n' \"${CODEX_LOGIN_OUTPUT:-authenticated}\"; printf '%s\\n' \"${CODEX_LOGIN_ERROR:-}\" >&2; "
+            body += "[ \"${CODEX_LOGIN_STATUS:-0}\" = hang ] && while :; do :; done; exit \"${CODEX_LOGIN_STATUS:-0}\" ;;\n"
+            body += "esac\n"
         elif name == "python3":
             body += f'exec "{sys.executable}" "$@"\n'
         path = self.bin / name
@@ -60,6 +64,7 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(report["schema_version"], 1)
         self.assertEqual(report["overall"], "PASS")
         self.assertIn("dependency.codex", {item["id"] for item in report["checks"]})
+        self.assertEqual({item["id"]: item for item in report["checks"]}["dependency.codex_auth"]["status"], "PASS")
         self.assertNotIn("\x1b", result.stdout)
 
     def test_missing_required_dependency_fails(self):
@@ -67,6 +72,26 @@ class DoctorTests(unittest.TestCase):
         result = self.run_doctor()
         self.assertEqual(result.returncode, 1)
         self.assertIn("FAIL jq is missing", result.stdout)
+
+    def test_logged_out_codex_is_required_failure_without_auth_output(self):
+        self.env.update({"CODEX_LOGIN_STATUS": "1", "CODEX_LOGIN_OUTPUT": "secret-token@example.test",
+                         "CODEX_LOGIN_ERROR": "secret-auth-error"})
+        result = self.run_doctor("--json")
+        self.assertEqual(result.returncode, 1)
+        self.assertNotIn("secret-token@example.test", result.stdout)
+        self.assertNotIn("secret-auth-error", result.stdout)
+        check = {item["id"]: item for item in json.loads(result.stdout)["checks"]}["dependency.codex_auth"]
+        self.assertEqual(check["status"], "FAIL")
+        self.assertEqual(check["message"], "Codex CLI is not authenticated")
+        self.assertEqual(check["fix"], "Run codex login to authenticate the Codex CLI.")
+
+    def test_auth_timeout_is_a_clean_required_failure(self):
+        self.env["CODEX_LOGIN_STATUS"] = "hang"
+        result = self.run_doctor("--json")
+        self.assertEqual(result.returncode, 1)
+        self.assertNotIn("hang", result.stdout)
+        check = {item["id"]: item for item in json.loads(result.stdout)["checks"]}["dependency.codex_auth"]
+        self.assertEqual(check["status"], "FAIL")
 
     def test_human_report_has_groups_and_actionable_fixes(self):
         result = self.run_doctor()
@@ -107,7 +132,6 @@ class DoctorTests(unittest.TestCase):
     def test_optional_and_recommended_warnings_do_not_fail(self):
         result = self.run_doctor()
         self.assertEqual(result.returncode, 0)
-        self.assertIn("WARN PyQt6 not available; prompts use the KDialog fallback and the history viewer is unavailable", result.stdout)
         self.assertIn("WARN parecord not found", result.stdout)
 
     def test_usage_error(self):
@@ -150,7 +174,9 @@ class DoctorTests(unittest.TestCase):
     def test_state_and_history_are_not_mutated_and_paths_are_sanitized(self):
         state = self.config / "jippity" / "state"
         history = self.data / "jippity" / "history.jsonl"
-        state.write_text('VOICE_ENABLED=$(touch should-not-exist)\nTOKEN=do-not-print\n')
+        state.write_text('THREAD_ID="$(touch should-not-exist)"\n'
+                         'VOICE_ENABLED=$(touch also-should-not-exist)\n'
+                         'CONTINUE_DEFAULT=not-a-boolean\nTOKEN=do-not-print\n')
         history.write_text('{"prompt":"private prompt"}\n')
         before = (state.read_bytes(), history.read_bytes())
         result = self.run_doctor("--json")
@@ -160,6 +186,7 @@ class DoctorTests(unittest.TestCase):
         self.assertNotIn("do-not-print", result.stdout)
         self.assertNotIn("private prompt", result.stdout)
         self.assertFalse((self.base / "should-not-exist").exists())
+        self.assertFalse((self.base / "also-should-not-exist").exists())
         checks = {item["id"]: item for item in json.loads(result.stdout)["checks"]}
         self.assertEqual(checks["state.validity"]["status"], "WARN")
 

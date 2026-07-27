@@ -30,11 +30,11 @@ It started with a small friction point: asking Codex about something already vis
 |---|---|
 | **Capture and ask** | Select a region, capture the active window or full screen, or send a text-only quick prompt. Screenshot cancellation and capture errors are handled before a request is sent. |
 | **Desktop flow** | Bind suggested KDE global shortcuts, get a response-ready notification, then read the answer in a dynamically sized desktop popup. |
-| **Prompt experience** | Use an always-on-top native PyQt6 prompt when available, press Enter to send, continue a prior thread, and keep the continuation preference for the next prompt. Ordinary prompts fall back to a two-step KDialog flow without PyQt6. |
+| **Prompt experience** | Use an always-on-top native PyQt6 prompt when available, press Enter to send, continue a prior thread, or opt into live web search for one prompt. Ordinary prompts fall back to a KDialog flow without PyQt6. |
 | **Local threads** | Start fresh threads, reconstruct earlier context locally, search prompts and responses, read transcripts, see timestamps/exchange counts/modes, set an older thread active, and delete threads with their stored screenshots. |
 | **Optional voice** | Hold Alt or the on-screen button to record with `parecord`; whisper.cpp inserts a local transcription at the cursor for editing before you send it. |
-| **Custom tools** | Opt in to tool manifests that teach Codex about commands you already have. Unsandboxed execution stays off by default and requires approval for each prompt. |
-| **Jippity Doctor** | Run local, read-only diagnostics for the platform, dependencies, voice support, files, state locations, history access, and active manifests. |
+| **Custom tools** | Opt in to tool manifests that teach Codex about commands you already have. Their separate full-system-access option stays off by default and requires approval for each prompt. |
+| **Jippity Doctor** | Run local, read-only diagnostics for the platform, dependencies, Codex authentication, voice support, files, state locations, history access, and active manifests. |
 
 ## The Flow
 
@@ -126,7 +126,9 @@ Custom tools are optional. They are a way to give Codex instructions for using c
 - Bundled commands can be resolved independently of the current working directory.
 - `@command` defines the invocation; repeatable `@instruction` entries give Codex behavioral guidance.
 - `./jippity-tools`, `--list`, and `--json` expose active manifests. The graphical history viewer can show them too.
-- The per-prompt unsandboxed-execution option appears only when active tools exist. It is never enabled automatically.
+- **Use live web search** is always available for any prompt. It adds Codex live-web search only; it is off by default and never remembered.
+- **Allow trusted tools full system access** appears only when active tools exist. It controls the explicit `danger-full-access` sandbox bypass; it is also off by default and never remembered.
+- Live web search and full system access are independent. Internet questions do not require full system access.
 
 The bundled Doctor executable ships with Jippity, but its teaching manifest remains inactive until you choose to enable it:
 
@@ -146,7 +148,7 @@ Run `./jippity-doctor` for a concise human report, or `./jippity-doctor --json` 
 | `1` | At least one required runtime check failed. |
 | `2` | Invalid command-line usage. |
 
-Doctor checks Linux/platform signals, required dependencies, PyQt6, optional voice components, bundled script permissions, state and history locations, and active tool manifests. It is local and read-only: no support bundle upload, no automatic repair, no model/API request, and no `danger-full-access`. It may run `codex --version` locally. Home-directory paths are sanitized in its output.
+Doctor checks Linux/platform signals, required dependencies, Codex CLI authentication, PyQt6, optional voice components, bundled script permissions, state and history locations, and active tool manifests. It is local and read-only: no support bundle upload, no automatic repair, no model/API request, and no `danger-full-access`. It may run `codex --version` and `codex login status` locally; authentication details and command output are never reported. Home-directory paths are sanitized in its output.
 
 ## Dependencies
 

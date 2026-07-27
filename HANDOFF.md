@@ -13,7 +13,7 @@ Shared core via `jippity --mode <region|screen|window|quick>` with four thin wra
 
 Additional commands:
 - `jippity-setup` — creates directories, prints KDE hotkey binding instructions
-- `jippity-prompt` — PyQt6 helper for the prompt dialog (input + continue-thread checkbox)
+- `jippity-prompt` — PyQt6 helper for the prompt dialog (input, live search, tool access, and continue-thread controls)
 - `jippity-history` — PyQt6 helper for the history viewer (`jippity --history`; unavailable without PyQt6)
 - `jippity-tools` — scans `tools/` dir, emits a `[Available jippity tools]` index block for the codex context (or `--json` / `--list` for introspection)
 - `jippity-doctor` — read-only local diagnostic report (`--json` for structured output)
@@ -27,12 +27,12 @@ Toolbar removed:
 - **Clean output via `-o` flag.** `codex exec -o <file>` writes only the final response, no metadata header.
 - **Dynamic dialog sizing.** `fold -w 80` estimates visual wrapped lines; height = (lines × 22px + 100px), clamped 120–800px.
 - **Persistent storage.** Screenshots, responses, logs under `~/.local/share/jippity/`. History appended to `history.jsonl` (JSONL: timestamp, mode, prompt, responseFile, imageFile).
-- **State file at `~/.config/jippity/state`.** Tracks `THREAD_ID`, `LAST_MODE`, `CONTINUE_DEFAULT` (sticky checkbox state). No persistent mode toggle — continue decision is made per-query via checkbox.
+- **State file at `~/.config/jippity/state`.** Tracks `THREAD_ID`, `LAST_MODE`, `CONTINUE_DEFAULT` (sticky checkbox state), and `VOICE_ENABLED`; it is parsed as non-executable data. No persistent mode toggle — continue decision is made per-query via checkbox.
 - **Spectacle noise suppressed.** Stderr redirected to `/dev/null` to hide Tesseract library warnings.
 - **Notification popup.** `kdialog --passivepopup "Jippity response ready" 3` after each completion.
 - **No streaming.** Blocks for full response. Streaming possible later.
-- **Tools.** Active manifests in `tools/` use `# @tool` front-matter (`@tool`, optional `@command`, `@description`, `@usage`, `@example`, `@installed-by`). `jippity-tools` scans them and prepends an `[Available jippity tools]` index block to Codex context; the history viewer's "Tools…" button shows the same index via `jippity-tools --json`. A manifest does not install a command; external commands must be available in `$PATH`. Active tools expose a per-prompt, default-off unsandboxed execution option.
-- **Doctor.** `jippity-doctor` reports platform, dependencies, voice readiness, scripts, state metadata, and active manifests without reading history contents or changing files. It is local-only, never starts a Codex conversation or model/API request, and may run `codex --version` locally. The optional `examples/tools/jippity-doctor` manifest is inactive until copied to `tools/`; it requires neither network access nor sandbox bypass.
+- **Live search and tools.** Every prompt has a default-off, non-sticky live-web-search choice. Active tools additionally expose a separate default-off, non-sticky full-system-access choice that alone controls `danger-full-access`; search never enables it.
+- **Doctor.** `jippity-doctor` reports platform, dependencies, Codex authentication, voice readiness, scripts, state metadata, and active manifests without reading history contents or changing files. It is local-only, never starts a Codex conversation or model/API request, and may run silent `codex --version` and `codex login status` checks without reporting authentication data. The optional `examples/tools/jippity-doctor` manifest is inactive until copied to `tools/`; it requires neither network access nor sandbox bypass.
 
 ### What was validated
 

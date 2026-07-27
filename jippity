@@ -25,6 +25,7 @@ done
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/jippity"
 HISTORY_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/jippity"
 TMPDIR="${TMPDIR:-/tmp}/jippity"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$TMPDIR" "$CONFIG_DIR" "$HISTORY_DIR"/{screenshots,responses,logs}
 STATE_FILE="$CONFIG_DIR/state"
 HISTORY_FILE="$HISTORY_DIR/history.jsonl"
@@ -34,11 +35,34 @@ THREAD_ID=""
 LAST_MODE=""
 CONTINUE_DEFAULT=false
 VOICE_ENABLED=false
-[ -f "$STATE_FILE" ] && source "$STATE_FILE"
+if [ -f "$STATE_FILE" ]; then
+    # State is data, never shell code. Only known keys are accepted.
+    while IFS= read -r state_line || [ -n "$state_line" ]; do
+        case "$state_line" in
+            THREAD_ID=*|LAST_MODE=*|CONTINUE_DEFAULT=*|VOICE_ENABLED=*)
+                state_key=${state_line%%=*}
+                state_value=${state_line#*=}
+                # Preserve the simple quoted string format written by Jippity.
+                if [[ ${#state_value} -ge 2 && "$state_value" == \"*\" && "$state_value" == *\" ]]; then
+                    state_value=${state_value:1:${#state_value}-2}
+                fi
+                case "$state_key" in
+                    THREAD_ID) THREAD_ID=$state_value ;;
+                    LAST_MODE) LAST_MODE=$state_value ;;
+                    CONTINUE_DEFAULT)
+                        [ "$state_value" = true ] && CONTINUE_DEFAULT=true
+                        ;;
+                    VOICE_ENABLED)
+                        [ "$state_value" = true ] && VOICE_ENABLED=true
+                        ;;
+                esac
+                ;;
+        esac
+    done < "$STATE_FILE"
+fi
 
 # --- Handle --history (delegate to standalone PyQt6 viewer) ---
 if [ "$DO_HISTORY" = true ]; then
-    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
     exec "$SCRIPT_DIR/jippity-history"
 fi
 
@@ -86,12 +110,12 @@ fi
 HAS_THREAD=false
 [ -n "$THREAD_ID" ] && [ -f "$HISTORY_FILE" ] && HAS_THREAD=true
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROMPT_HELPER="$SCRIPT_DIR/jippity-prompt"
 
 PROMPT=""
 CONTINUE_FLAG="FALSE"
 BYPASS_SANDBOX=false
+LIVE_SEARCH=false
 HAS_TOOLS=false
 
 # Only active manifests in tools/ make custom commands available to Codex.
@@ -116,6 +140,8 @@ if python3 -c "import PyQt6" 2>/dev/null && [ -x "$PROMPT_HELPER" ]; then
         [ "$CONTINUE_FLAG" = "TRUE" ] && CONTINUE_DEFAULT=true || CONTINUE_DEFAULT=false
         BYPASS_SANDBOX=$(jq -r '.bypass_sandbox // false' "$RESULT_FILE" 2>/dev/null | tr '[:lower:]' '[:upper:]')
         [ "$BYPASS_SANDBOX" = "TRUE" ] && BYPASS_SANDBOX=true || BYPASS_SANDBOX=false
+        LIVE_SEARCH=$(jq -r '.live_search // false' "$RESULT_FILE" 2>/dev/null | tr '[:lower:]' '[:upper:]')
+        [ "$LIVE_SEARCH" = "TRUE" ] && LIVE_SEARCH=true || LIVE_SEARCH=false
     fi
     rm -f "$RESULT_FILE"
 else
@@ -131,7 +157,10 @@ else
     else
         CONTINUE_DEFAULT=false
     fi
-    if $HAS_TOOLS && kdialog --default no --yesno "Run Codex without sandboxing? Commands invoked by Codex may access local files and the network as your user. Enable this only when a trusted tool requires it."; then
+    if kdialog --default no --yesno "Use live web search? Allow Codex to search the live web for current information for this prompt."; then
+        LIVE_SEARCH=true
+    fi
+    if $HAS_TOOLS && kdialog --default no --yesno "Allow trusted tools full system access? Commands invoked by Codex may access broad local files and the network as your user. Enable this only when a trusted tool requires it."; then
         BYPASS_SANDBOX=true
     fi
 fi
@@ -180,20 +209,27 @@ fi
 OUTFILE="$HISTORY_DIR/responses/${MODE}_$STAMP.txt"
 LOGFILE="$HISTORY_DIR/logs/${MODE}_$STAMP.log"
 
-CODEX_BASE=(codex exec --ephemeral --skip-git-repo-check)
+CODEX_COMMAND=(codex)
+
+# Live search is independent of tool permissions and is available for every prompt.
+if [ "$LIVE_SEARCH" = true ]; then
+    CODEX_COMMAND+=(--search)
+fi
+
+CODEX_COMMAND+=(exec --ephemeral --skip-git-repo-check)
 
 # Apply sandbox bypass if user opted in (per-prompt, never sticky)
 if [ "$BYPASS_SANDBOX" = true ]; then
-    CODEX_BASE+=(-s danger-full-access)
+    CODEX_COMMAND+=(-s danger-full-access)
 fi
 
 if [ -n "$SCREENSHOT" ]; then
-    if ! "${CODEX_BASE[@]}" -i "$SCREENSHOT" -o "$OUTFILE" -- "$CONTEXT" > "$LOGFILE" 2>&1; then
+    if ! "${CODEX_COMMAND[@]}" -i "$SCREENSHOT" -o "$OUTFILE" -- "$CONTEXT" > "$LOGFILE" 2>&1; then
         kdialog --error "Codex exited with an error. See $LOGFILE for details."
         exit 1
     fi
 else
-    if ! "${CODEX_BASE[@]}" -o "$OUTFILE" -- "$CONTEXT" > "$LOGFILE" 2>&1; then
+    if ! "${CODEX_COMMAND[@]}" -o "$OUTFILE" -- "$CONTEXT" > "$LOGFILE" 2>&1; then
         kdialog --error "Codex exited with an error. See $LOGFILE for details."
         exit 1
     fi

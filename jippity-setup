@@ -30,7 +30,7 @@ Dependencies (setup creates directories; it does not install packages):
   - Required: codex, spectacle, kdialog, jq, Python 3, and standard Unix
     commands used by Jippity.
     Some may already be installed depending on your distribution and KDE setup.
-  - Recommended: PyQt6 enables a combined input + continue-thread checkbox
+  - Recommended: PyQt6 enables a combined input, live-search, tool-access, and continue-thread
     dialog and the history viewer.
     It may already be installed depending on your distribution. Without it,
     ordinary prompts use a two-step kdialog flow and the history viewer is unavailable.
@@ -72,10 +72,11 @@ Commands:
   $SCRIPT_DIR/jippity-doctor                                Read-only local diagnostics
   $SCRIPT_DIR/jippity-doctor --json                         Structured diagnostics
 
-Doctor checks the supported desktop environment, dependencies, optional voice
+Doctor checks the supported desktop environment, dependencies, Codex authentication, optional voice
 support, Jippity files/state metadata, and active manifests. It does not access
 the network, start a Codex conversation, read history contents, or modify any
-Jippity data. It may run codex --version locally and never makes a model/API request.
+Jippity data. It may run codex --version and silent codex login status locally,
+never makes a model/API request, and never reports authentication details.
 Exit codes: 0 required checks pass, 1 required failure, 2 invalid usage.
 
 Optional Codex troubleshooting tool (metadata only; doctor already ships):
@@ -89,6 +90,11 @@ Continue-thread flow:
     is remembered for next time.
   - Check it to send prior conversation context with your new prompt
   - Uncheck it to start a fresh thread
+
+Per-prompt options:
+  - "Use live web search" is always available, off by default, and never sticky.
+  - "Allow trusted tools full system access" appears only with active tools; it is
+    separate from live search, off by default, and never sticky.
 
 History viewer (Super+H):
   - Lists threads (most recent first) with exchange count and timestamp

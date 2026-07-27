@@ -15,7 +15,7 @@ A Linux-only KDE Plasma/Wayland hotkey frontend for [Codex CLI](https://github.c
 | `jippity-screen` | Wrapper → `jippity --mode screen` |
 | `jippity-region` | Wrapper → `jippity --mode region` |
 | `jippity-quick` | Wrapper → `jippity --mode quick` |
-| `jippity-prompt` | PyQt6 helper: prompt input + continue-thread checkbox dialog + (optional) hold-to-talk voice |
+| `jippity-prompt` | PyQt6 helper: prompt input, per-prompt live search/tool access, continue-thread checkbox, and optional hold-to-talk voice |
 | `jippity-history` | PyQt6 helper: browse/search/delete threads, set active thread; unavailable without PyQt6 |
 | `jippity-setup` | Create dirs, print KDE hotkey instructions |
 | `jippity-tools` | Scan `tools/` dir, emit tools index block for codex context or JSON for viewers |
@@ -26,7 +26,7 @@ A Linux-only KDE Plasma/Wayland hotkey frontend for [Codex CLI](https://github.c
 - **Core principle:** thin UX layer over `codex` CLI. Jippity owns hotkeys, screenshots, prompt input, output display. Codex owns model, reasoning, auth.
 - **Target platform:** Linux + KDE Plasma + Wayland; tested on CachyOS/Arch. Do not assume other distributions or desktop environments work.
 - **External deps:** `codex`, `spectacle`, `kdialog`, `jq`, Python 3, standard Unix tools, and KDE global shortcuts. PyQt6 is recommended; `parecord`, whisper.cpp, and a model are optional for voice input.
-- **Config / state:** `~/.config/jippity/state` (THREAD_ID, LAST_MODE, CONTINUE_DEFAULT, VOICE_ENABLED)
+- **Config / state:** `~/.config/jippity/state` (THREAD_ID, LAST_MODE, CONTINUE_DEFAULT, VOICE_ENABLED), parsed as data rather than shell code.
 - **History:** `~/.local/share/jippity/` with `screenshots/`, `responses/`, `logs/`, `history.jsonl`
 
 ## Key design decisions
@@ -35,15 +35,15 @@ A Linux-only KDE Plasma/Wayland hotkey frontend for [Codex CLI](https://github.c
 - **Clean output** — `codex exec -o <file>` writes only the last message, no metadata header.
 - **`--ephemeral`** — all `codex exec` calls use `--ephemeral` to avoid polluting codex's session store with one-off questions.
 - **Local thread resume** — instead of `codex exec resume`, reconstruct conversation history from local `history.jsonl` and prepend to the new prompt. More reliable, no dependency on codex session store, works even if codex clears sessions.
-- **Combined prompt dialog** — uses a tiny PyQt6 helper (`jippity-prompt`) if available (input + continue-thread checkbox in one native Qt dialog), falls back to `kdialog --inputbox` + `kdialog --yesno` for ordinary prompts. The graphical history viewer requires PyQt6 and is unavailable without it. No separate toggle/reset flow — checkbox is sticky across runs.
+- **Combined prompt dialog** — uses a tiny PyQt6 helper (`jippity-prompt`) if available (input, live-search, tool-access, and continue-thread controls), with a KDialog fallback. Live search is always available, default-off, and per-prompt; it is distinct from the active-tools-only full-system-access option, which is also default-off and per-prompt. Only the continue checkbox is sticky.
 - **Voice input (hold-to-talk)** — when `VOICE_ENABLED=true` in state file and `whisper-cli` + a model file are installed, `jippity-prompt` adds a "Hold to Talk" button and listens for Alt-hold. Both call the same `start_recording()` / `stop_and_transcribe()` pair: `parecord` writes 16kHz mono WAV, then `whisper-cli -nt` transcribes and inserts at the cursor (no auto-submit — user can edit first). Off by default, zero-cost fallback if deps are missing.
 - **History viewer** — `jippity --history` launches a PyQt6 window (`jippity-history`) listing threads (most recent first), full transcript on selection, search across prompts+responses, multi-select delete (also removes screenshot files), and "Set as Active Thread" (writes THREAD_ID + CONTINUE_DEFAULT=true so next prompt auto-continues).
 - **JSONL storage** — entries are written via `jq -nc` (compact, one per line). The viewer's parser is tolerant of legacy pretty-printed entries and migrates them to compact form on the first delete.
 - **Dynamic dialog sizing** — `fold -w 80` for visual line estimate, `height = lines × 22px + 100px`, clamped 120–800px.
 - **Spectacle noise suppressed** — stderr to `/dev/null`.
 - **Notification** — `kdialog --passivepopup` after each response.
-- **Tools** — active manifests in `tools/` (small files with `# @tool` front-matter) are scanned by `jippity-tools` and prepended as an index block to Codex context. A manifest does not install its command; external commands must be in `$PATH`. Active tools expose a per-prompt, default-off unsandboxed execution option.
-- **Doctor** — `jippity-doctor` is a standard-library, local, read-only command. It does not read history contents, mutate Jippity files, access the network, start a Codex conversation, or make a model/API request. It may run `codex --version` locally. It returns 0 for required-check success, 1 for required failures, and 2 for usage errors.
+- **Tools** — active manifests in `tools/` (small files with `# @tool` front-matter) are scanned by `jippity-tools` and prepended as an index block to Codex context. A manifest does not install its command; external commands must be in `$PATH`. Active tools expose a distinct per-prompt, default-off full-system-access option.
+- **Doctor** — `jippity-doctor` is a standard-library, local, read-only command. It does not read history contents, mutate Jippity files, access the network, start a Codex conversation, or make a model/API request. It may run `codex --version` and silent `codex login status` checks locally, without reporting auth details. It returns 0 for required-check success, 1 for required failures, and 2 for usage errors.
 
 ## Development roadmap
 

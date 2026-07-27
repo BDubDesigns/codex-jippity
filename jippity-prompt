@@ -2,7 +2,7 @@
 """Jippity prompt dialog: prompt input + continue-thread checkbox in one window.
 
 Usage: jippity-prompt <result_file> <label_text> <has_thread> <initial_check> <voice_enabled> <has_tools>
-Writes JSON {prompt, continue, bypass_sandbox} to result_file on OK (exit 0).
+Writes JSON {prompt, continue, live_search, bypass_sandbox} to result_file on OK (exit 0).
 Exits 1 on cancel/close without writing.
 
 When voice_enabled is "1", shows a "Hold to Talk" button and listens for
@@ -10,7 +10,8 @@ Alt-hold to start audio capture. On release, transcribes via whisper.cpp
 and inserts the result at the cursor position (no auto-submit — user can
 edit before pressing Enter).
 
-When has_tools is "1", shows a "Run Codex without sandboxing" checkbox.
+Always shows a per-prompt "Use live web search" checkbox. When has_tools is
+"1", also shows an "Allow trusted tools full system access" checkbox.
 It always defaults to off; users must explicitly opt in for each prompt.
 """
 import json
@@ -94,11 +95,19 @@ def main():
     chk.setEnabled(has_thread)
     layout.addWidget(chk)
 
-    bypass_chk = QCheckBox("Run Codex without sandboxing")
+    live_search_chk = QCheckBox("Use live web search")
+    live_search_chk.setChecked(False)
+    live_search_chk.setToolTip(
+        "Allow Codex to search the live web for current information for this prompt. "
+        "This is off by default and is not remembered."
+    )
+    layout.addWidget(live_search_chk)
+
+    bypass_chk = QCheckBox("Allow trusted tools full system access")
     bypass_chk.setChecked(False)
     bypass_chk.setEnabled(has_tools)
     bypass_chk.setToolTip(
-        "Commands invoked by Codex may access local files and the network as "
+        "Commands invoked by Codex may access broad local files and the network as "
         "your user. This is off by default and requires opt-in for each prompt; "
         "enable it only when a trusted tool requires it."
     )
@@ -226,6 +235,7 @@ def main():
             json.dump({
                 "prompt": edit.text(),
                 "continue": chk.isChecked(),
+                "live_search": live_search_chk.isChecked(),
                 "bypass_sandbox": bypass_chk.isChecked(),
             }, f)
         sys.exit(0)

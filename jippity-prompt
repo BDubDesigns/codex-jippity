@@ -113,9 +113,9 @@ def main():
     bypass_chk.setChecked(False)
     bypass_chk.setEnabled(has_tools)
     bypass_chk.setToolTip(
-        "When checked, Codex-invoked commands run unsandboxed as your current "
-        "user, with access to local files and the network. This is off by "
-        "default and requires opt-in for each prompt."
+        "Commands invoked by Codex may access local files and the network as "
+        "your user. This is off by default and requires opt-in for each prompt; "
+        "enable it only when a trusted tool requires it."
     )
     layout.addWidget(bypass_chk)
 

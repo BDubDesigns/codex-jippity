@@ -131,7 +131,7 @@ else
     else
         CONTINUE_DEFAULT=false
     fi
-    if $HAS_TOOLS && kdialog --default no --yesno "Run Codex without sandboxing for this prompt? This gives Codex-invoked commands unsandboxed access as your current user, including local files and the network."; then
+    if $HAS_TOOLS && kdialog --default no --yesno "Run Codex without sandboxing? Commands invoked by Codex may access local files and the network as your user. Enable this only when a trusted tool requires it."; then
         BYPASS_SANDBOX=true
     fi
 fi

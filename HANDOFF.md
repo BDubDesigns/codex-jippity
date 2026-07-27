@@ -30,7 +30,7 @@ Toolbar removed:
 - **Spectacle noise suppressed.** Stderr redirected to `/dev/null` to hide Tesseract library warnings.
 - **Notification popup.** `kdialog --passivepopup "Jippity response ready" 3` after each completion.
 - **No streaming.** Blocks for full response. Streaming possible later.
-- **Tools.** Active manifests in `tools/` use `# @tool` front-matter (`@tool`, `@description`, `@usage`, `@example`, `@installed-by`). `jippity-tools` scans them and prepends an `[Available jippity tools]` index block to Codex context; the history viewer's "Tools…" button shows the same index via `jippity-tools --json`. Examples belong in `examples/tools/` and are inactive. A manifest does not install a command; external commands must be available in `$PATH`. Active tools expose a per-prompt, default-off unsandboxed execution option.
+- **Tools.** Active manifests in `tools/` use `# @tool` front-matter (`@tool`, `@description`, `@usage`, `@example`, `@installed-by`). `jippity-tools` scans them and prepends an `[Available jippity tools]` index block to Codex context; the history viewer's "Tools…" button shows the same index via `jippity-tools --json`. A manifest does not install a command; external commands must be available in `$PATH`. Active tools expose a per-prompt, default-off unsandboxed execution option.
 
 ### What was validated
 

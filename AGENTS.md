@@ -41,7 +41,7 @@ A Linux-only KDE Plasma/Wayland hotkey frontend for [Codex CLI](https://github.c
 - **Dynamic dialog sizing** — `fold -w 80` for visual line estimate, `height = lines × 22px + 100px`, clamped 120–800px.
 - **Spectacle noise suppressed** — stderr to `/dev/null`.
 - **Notification** — `kdialog --passivepopup` after each response.
-- **Tools** — active manifests in `tools/` (small files with `# @tool` front-matter) are scanned by `jippity-tools` and prepended as an index block to Codex context. Examples belong in `examples/tools/` and are inactive. A manifest does not install its command; external commands must be in `$PATH`. Active tools expose a per-prompt, default-off unsandboxed execution option.
+- **Tools** — active manifests in `tools/` (small files with `# @tool` front-matter) are scanned by `jippity-tools` and prepended as an index block to Codex context. A manifest does not install its command; external commands must be in `$PATH`. Active tools expose a per-prompt, default-off unsandboxed execution option.
 
 ## Development roadmap
 
@@ -60,7 +60,7 @@ A Linux-only KDE Plasma/Wayland hotkey frontend for [Codex CLI](https://github.c
 
 ## Tools
 
-Active manifests in `tools/` describe commands Codex can invoke. The directory is empty by default. Inactive examples are in `examples/tools/`; copy or create a manifest in `tools/` only after separately installing its command and ensuring it is in `$PATH`.
+Active manifests in `tools/` describe commands Codex can invoke. The directory is empty by default. Create a manifest only after separately installing its command and ensuring it is in `$PATH`.
 
 Tool file format:
 

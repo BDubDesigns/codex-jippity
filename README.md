@@ -1,6 +1,6 @@
 # Jippity
 
-Jippity is a lightweight KDE/Wayland hotkey frontend for the [Codex CLI](https://github.com/openai/codex). Capture a region, window, or screen; ask a question; and receive the answer in a popup without interrupting your desktop workflow. It also supports text-only quick prompts, local conversation history with searchable transcripts, continuing an earlier thread, and optional local Whisper transcription.
+Jippity is a lightweight KDE Plasma and Wayland hotkey frontend for the [Codex CLI](https://github.com/openai/codex). Capture a region, window, or screen; ask a question; and receive the answer in a popup without interrupting your desktop workflow. It supports region, window, full-screen, and text-only prompts, plus local conversation threads with searchable history and the option to continue a previous thread. Optional Whisper transcription runs locally.
 
 It is implemented with shell and Python/PyQt6, with no daemon and no build system.
 
@@ -10,7 +10,7 @@ It is implemented with shell and Python/PyQt6, with no daemon and no build syste
 
 ## Why I built this
 
-I wanted to ask Codex about something visible on my desktop without opening a terminal, creating or locating a screenshot, and attaching it by hand. Jippity keeps that flow to a hotkey, a capture when needed, and a question.
+I wanted to ask Codex about something visible on my desktop without opening a terminal, manually creating or locating a screenshot, attaching it separately, and breaking my current workflow. Jippity keeps that flow to a hotkey, a capture when needed, and a question.
 
 ## Install and setup
 
@@ -31,7 +31,7 @@ The setup script creates Jippity's local directories and prints KDE global-short
 - KDialog (`kdialog`)
 - `jq`
 - Python 3
-- Standard Unix tools
+- Standard Unix commands used by the scripts, including `bash`, `cat`, `date`, `fold`, `grep`, `mkdir`, `mktemp`, `rm`, and `tr`
 
 Some dependencies may already be installed depending on your distribution. KDE Plasma installations do not necessarily include every dependency above.
 
@@ -80,11 +80,27 @@ Bind them in KDE System Settings > Shortcuts > Custom Shortcuts.
 - Uses local history reconstruction for thread continuity rather than Codex session storage.
 - Uses `codex exec --ephemeral` for each request.
 
+## Status and roadmap
+
+Core screenshot and text prompt flows work, as do local thread continuation and searchable history. Voice input is implemented. A richer GUI and tray are future work, not a requirement for using the current application. [Jippity Doctor is tracked separately in Issue #8](https://github.com/BDubDesigns/codex-jippity/issues/8).
+
 ## Custom tools
 
-Custom tools are an advanced feature. Active manifests live in `tools/`; examples live in `examples/tools/`. Copy an example or create a manifest in `tools/` only after reviewing it.
+Custom tools are an advanced feature. Active manifests live in `tools/`. A manifest teaches Codex about a command; it does not install or implement that command. External commands must already be installed and available in `$PATH`. Bundled tools would include both a real executable command and an associated manifest.
 
-A manifest describes a command; it does not install that command. External commands must be installed separately and available in `$PATH`. Adding active tools may expose the per-prompt **Run Codex without sandboxing** option. Review tools before allowing unsandboxed execution.
+Review a command before teaching Codex to invoke it. Adding active tools may expose the per-prompt **Run Codex without sandboxing** option; treat tools that require unsandboxed execution cautiously.
+
+Documentation-only manifest format:
+
+```text
+# @tool example-command
+# @description Brief description of what the command does
+# @usage example-command [options]
+# @example example-command --help
+# @installed-by external (must be installed separately and available in $PATH)
+```
+
+Jippity Doctor will provide a bundled diagnostic command and an optional example manifest in [Issue #8](https://github.com/BDubDesigns/codex-jippity/issues/8).
 
 ## Privacy and security
 
@@ -94,6 +110,7 @@ A manifest describes a command; it does not install that command. External comma
 - Whisper transcription runs locally when whisper.cpp is used.
 - The unsandboxed execution option grants Codex-invoked commands broad access as your current user, including local files and the network. It should normally remain disabled.
 - Avoid capturing or submitting sensitive information you do not intend to send through Codex.
+- Saved local history may itself contain sensitive prompts, answers, or screenshots.
 
 ## Scripts
 
